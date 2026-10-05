@@ -5,7 +5,7 @@ import { kstToday } from "@/lib/format";
 import { getReports } from "@/lib/queries";
 import { ReportUpload } from "./ReportUpload";
 
-// 요약 서버 액션이 이 페이지에서 실행되므로 Claude 응답을 기다릴 시간을 넉넉히 줌
+// 요약 서버 액션이 이 페이지에서 실행되므로 Gemini 응답을 기다릴 시간을 넉넉히 줌
 export const maxDuration = 300;
 
 export default async function ReportsPage() {
@@ -14,7 +14,7 @@ export default async function ReportsPage() {
   return (
     <>
       <SetupNotice />
-      <Card title="증권사 리포트 올리기 (PDF 여러 개 가능, 한 페이지로 묶어 요약)">
+      <Card title="리포트 PDF·유튜브 링크 올리기 (여러 개를 한 페이지로 묶어 요약)">
         <ReportUpload today={today} />
       </Card>
       <Card title="지난 요약">

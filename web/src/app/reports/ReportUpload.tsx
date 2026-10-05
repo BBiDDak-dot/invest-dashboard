@@ -4,38 +4,45 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createReportSummary, prepareReportUpload } from "@/app/actions";
 
-const MAX_TOTAL_MB = 20; // Claude 요청 한도(32MB)를 base64 변환 후에도 넘지 않도록
+const MAX_TOTAL_MB = 14; // Gemini 요청 한도(20MB)를 base64 변환 후에도 넘지 않도록
 
 export function ReportUpload({ today }: { today: string }) {
   const router = useRouter();
   const [files, setFiles] = useState<File[]>([]);
+  const [links, setLinks] = useState("");
   const [date, setDate] = useState(today);
   const [status, setStatus] = useState<{ text: string; error?: boolean } | null>(null);
   const busy = status != null && !status.error;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (files.length === 0) return setStatus({ text: "PDF 파일을 선택할 것", error: true });
+    const youtube = links.split(/\s+/).filter(Boolean);
+    if (files.length === 0 && youtube.length === 0) return setStatus({ text: "PDF 파일이나 유튜브 링크를 넣을 것", error: true });
     const totalMb = files.reduce((s, f) => s + f.size, 0) / 1024 / 1024;
     if (totalMb > MAX_TOTAL_MB) return setStatus({ text: `한 번에 ${MAX_TOTAL_MB}MB까지 가능 (현재 ${totalMb.toFixed(1)}MB)`, error: true });
 
-    setStatus({ text: "업로드 중…" });
-    const prep = await prepareReportUpload(files.map((f) => f.name));
-    if (!prep.uploads) return setStatus({ text: prep.error ?? "업로드 준비 실패", error: true });
-    try {
-      await Promise.all(
-        prep.uploads.map(async (u, i) => {
-          const res = await fetch(u.url, { method: "PUT", headers: { "Content-Type": "application/pdf" }, body: files[i] });
-          if (!res.ok) throw new Error(`${files[i].name} 업로드 실패 (${res.status})`);
-        }),
-      );
-    } catch (err) {
-      return setStatus({ text: (err as Error).message, error: true });
+    let uploads: { path: string; url: string }[] = [];
+    if (files.length > 0) {
+      setStatus({ text: "업로드 중…" });
+      const prep = await prepareReportUpload(files.map((f) => f.name));
+      if (!prep.uploads) return setStatus({ text: prep.error ?? "업로드 준비 실패", error: true });
+      uploads = prep.uploads;
+      try {
+        await Promise.all(
+          uploads.map(async (u, i) => {
+            const res = await fetch(u.url, { method: "PUT", headers: { "Content-Type": "application/pdf" }, body: files[i] });
+            if (!res.ok) throw new Error(`${files[i].name} 업로드 실패 (${res.status})`);
+          }),
+        );
+      } catch (err) {
+        return setStatus({ text: (err as Error).message, error: true });
+      }
     }
 
-    setStatus({ text: `Claude가 ${files.length}건을 읽고 요약하는 중… (1~3분 걸림)` });
+    setStatus({ text: `Gemini가 ${files.length + youtube.length}건을 읽고 요약하는 중… (1~3분 걸림)` });
     const result = await createReportSummary(
-      prep.uploads.map((u, i) => ({ path: u.path, name: files[i].name })),
+      uploads.map((u, i) => ({ path: u.path, name: files[i].name })),
+      youtube,
       date,
     );
     if (!result.id) return setStatus({ text: result.error ?? "요약 실패", error: true });
@@ -66,6 +73,14 @@ export function ReportUpload({ today }: { today: string }) {
           요약하기
         </button>
       </div>
+      <textarea
+        value={links}
+        onChange={(e) => setLinks(e.target.value)}
+        disabled={busy}
+        rows={2}
+        placeholder="유튜브 영상 링크 (여러 개면 줄바꿈으로 구분)"
+        className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+      />
       {files.length > 0 && <p className="text-xs text-zinc-500">{files.map((f) => f.name).join(", ")}</p>}
       {status && <p className={`text-sm ${status.error ? "text-amber-600" : "text-zinc-500"}`}>{status.text}</p>}
     </form>

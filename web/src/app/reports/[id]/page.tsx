@@ -22,7 +22,7 @@ export default async function ReportPage({ params }: PageProps<"/reports/[id]">)
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.summary}</ReactMarkdown>
       </article>
       <div className="flex items-center justify-between text-xs text-zinc-400">
-        <span>Claude 요약 ({report.model}) · 원문 확인 후 판단할 것</span>
+        <span>AI 요약 ({report.model}) · 원문 확인 후 판단할 것</span>
         <DeleteReport id={report.id} />
       </div>
     </>

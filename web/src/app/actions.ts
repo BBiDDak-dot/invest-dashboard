@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { AUTH_COOKIE, authToken } from "@/lib/auth";
 import { insert, remove, select, storage, update, type Security, type WatchItem } from "@/lib/db";
 import { getWatchItems } from "@/lib/queries";
-import { MODEL, summarizeReports } from "@/lib/summarize";
+import { summarizeReports } from "@/lib/summarize";
 import { fetchYearPrices } from "@/lib/yahoo";
 
 export type ActionState = { ok?: string; error?: string } | null;
@@ -143,25 +143,32 @@ export async function prepareReportUpload(names: string[]): Promise<{ uploads?: 
   }
 }
 
+const YOUTUBE = /^https:\/\/(www\.|m\.)?(youtube\.com\/(watch\?v=|shorts\/|live\/)|youtu\.be\/)[\w-]{6,}/;
+
 export async function createReportSummary(
   files: { path: string; name: string }[],
+  youtube: string[],
   reportDate: string,
 ): Promise<{ id?: string; error?: string }> {
   try {
     await requireAuth();
-    if (files.length === 0) throw new Error("파일이 없음");
-    const [data, watch] = await Promise.all([
-      Promise.all(files.map(async (f) => ({ name: f.name, data: await storage.download("reports", f.path) }))),
+    const links = youtube.map((u) => u.trim()).filter(Boolean);
+    const bad = links.find((u) => !YOUTUBE.test(u));
+    if (bad) throw new Error(`유튜브 영상 주소가 아님: ${bad}`);
+    if (files.length === 0 && links.length === 0) throw new Error("PDF나 유튜브 링크가 없음");
+    const [pdfs, watch] = await Promise.all([
+      Promise.all(files.map(async (f) => ({ name: f.name, pdf: await storage.download("reports", f.path) }))),
       getWatchItems(),
     ]);
-    const { text, model } = await summarizeReports(data, watch);
+    const sources = [...pdfs, ...links.map((u) => ({ name: u, youtube: u }))];
+    const { text, model } = await summarizeReports(sources, watch);
     const title = text.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? null;
     const [row] = await insert<{ id: string }>("reports", {
       report_date: /^\d{4}-\d{2}-\d{2}$/.test(reportDate) ? reportDate : undefined,
-      file_names: files.map((f) => f.name),
+      file_names: sources.map((s) => s.name),
       title,
       summary: text,
-      model: model ?? MODEL,
+      model,
     });
     revalidatePath("/reports");
     return { id: row.id };
