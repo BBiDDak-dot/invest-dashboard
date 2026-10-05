@@ -172,6 +172,30 @@ export async function removeStock(ticker: string): Promise<ActionState> {
   redirect("/watchlist");
 }
 
+// ---------- 뉴스 메모 ----------
+
+// 비워서 저장하면 메모 삭제
+export async function saveNewsNote(
+  item: { id: string; title: string; url: string; source: string; summary: string; time: string },
+  note: string,
+): Promise<ActionState> {
+  const state = await run(async () => {
+    const text = note.trim();
+    if (!/^[\w-]+$/.test(item.id)) throw new Error("잘못된 기사 id");
+    if (!text) {
+      await remove("news_notes", `id=eq.${encodeURIComponent(item.id)}`);
+      return "메모 삭제됨";
+    }
+    await insert(
+      "news_notes",
+      { id: item.id, title: item.title, url: item.url, source: item.source, summary: item.summary, news_time: item.time, note: text, updated_at: new Date().toISOString() },
+      { upsert: true },
+    );
+  });
+  if (!state?.error) revalidatePath("/news");
+  return state;
+}
+
 // ---------- 리포트 ----------
 
 export async function prepareReportUpload(names: string[]): Promise<{ uploads?: { path: string; url: string }[]; error?: string }> {

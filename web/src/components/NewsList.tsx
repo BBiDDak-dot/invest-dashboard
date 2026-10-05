@@ -1,8 +1,22 @@
 import { newsTime, type NewsItem } from "@/lib/news";
 import { Empty } from "./Card";
+import { NewsNote } from "./NewsNote";
 
-export function NewsList({ items, thumbs = true, tag }: { items: NewsItem[]; thumbs?: boolean; tag?: (n: NewsItem) => string | undefined }) {
-  if (items.length === 0) return <Empty>뉴스를 가져오지 못했음. 잠시 후 다시 열어볼 것.</Empty>;
+// notes를 넘기면 기사마다 메모 칸을 붙임 (기사 id → 메모)
+export function NewsList({
+  items,
+  thumbs = true,
+  tag,
+  notes,
+  empty,
+}: {
+  items: NewsItem[];
+  thumbs?: boolean;
+  tag?: (n: NewsItem) => string | undefined;
+  notes?: Map<string, string>;
+  empty?: string;
+}) {
+  if (items.length === 0) return <Empty>{empty ?? "뉴스를 가져오지 못했음. 잠시 후 다시 열어볼 것."}</Empty>;
   return (
     <ul className="divide-y divide-zinc-100 dark:divide-zinc-900">
       {items.map((n) => (
@@ -27,6 +41,7 @@ export function NewsList({ items, thumbs = true, tag }: { items: NewsItem[]; thu
               <img src={n.thumb} alt="" loading="lazy" className="h-16 w-24 shrink-0 rounded object-cover" />
             )}
           </a>
+          {notes && <NewsNote item={n} note={notes.get(n.id)} />}
         </li>
       ))}
     </ul>
