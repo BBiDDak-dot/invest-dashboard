@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Card, Empty } from "@/components/Card";
 import { MacroGrid } from "@/components/MacroGrid";
 import { SetupNotice } from "@/components/SetupNotice";
-import { WatchTable } from "@/components/WatchTable";
+import { TopPicks } from "@/components/TopPicks";
 import { getDisclosures, getMacro, getWatchlist } from "@/lib/queries";
 
 export default async function Home() {
@@ -10,8 +10,8 @@ export default async function Home() {
   return (
     <>
       <SetupNotice />
-      <Card title="관심종목">
-        <WatchTable rows={watch} />
+      <Card title="★ TOP PICK">
+        <TopPicks rows={watch.filter((w) => w.starred)} />
       </Card>
       <Card title="투자 지표 (최근 3년)">
         <MacroGrid rows={macro} />
