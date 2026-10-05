@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { Card, Empty } from "@/components/Card";
 import { MacroGrid } from "@/components/MacroGrid";
+import { SentimentNote } from "@/components/SentimentNote";
 import { SetupNotice } from "@/components/SetupNotice";
 import { TopPicks } from "@/components/TopPicks";
-import { getDisclosures, getMacro, getWatchlist } from "@/lib/queries";
+import { getDisclosures, getMacro, getWatchlist, isSentiment } from "@/lib/queries";
 
 export default async function Home() {
   const [watch, macro, disclosures] = await Promise.all([getWatchlist(), getMacro(), getDisclosures(10)]);
@@ -13,8 +14,12 @@ export default async function Home() {
       <Card title="★ TOP PICK">
         <TopPicks rows={watch.filter((w) => w.starred)} />
       </Card>
-      <Card title="투자 지표 (최근 3년)">
-        <MacroGrid rows={macro} />
+      <Card title="경제 지표 (최근 3년)">
+        <MacroGrid rows={macro.filter((r) => !isSentiment(r.series_id))} />
+      </Card>
+      <Card title="심리 지표 (최근 3년)">
+        <MacroGrid rows={macro.filter((r) => isSentiment(r.series_id))} />
+        <SentimentNote />
       </Card>
       <Card title="최근 공시">
         {disclosures.length === 0 ? (
