@@ -161,7 +161,8 @@ def periodic(key: str, start: dt.date, done: set[str], end: dt.date | None = Non
         v = values[(year, code)].get(d["corp_code"])
         if not v:
             continue
-        row = {}
+        # 한 번에 올리는 행들은 칸 구성이 같아야 함(PostgREST). 정기보고서엔 직전 분기 값이 없음
+        row = {"revenue_prev_q": None, "revenue_qoq": None, "op_prev_q": None, "op_qoq": None}
         for f in ("revenue", "op"):
             now, prev = _amount(v[f].get("thstrm_amount")), _amount(v[f].get("frmtrm_amount"))
             if code == "11011":
