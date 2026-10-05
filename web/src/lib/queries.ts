@@ -17,7 +17,11 @@ const FX_SERIES = "YF:KRW=X"; // 원/달러 환율 (관심종목 화면 상단�
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10);
 
 export type Ratios = { debtRatio: number | null; reserveRatio: number | null };
-export type WatchRow = WatchItem & { latest?: Price; history: number[]; upside: number | null } & Ratios;
+// debtRatio·reserveRatio는 직접 입력값 우선, auto*는 재무제표 계산값
+export type WatchRow = WatchItem & { latest?: Price; history: number[]; upside: number | null } & Ratios & {
+  autoDebtRatio: number | null;
+  autoReserveRatio: number | null;
+};
 
 // 최신 분기 재무상태표로 부채비율·유보율 계산
 export function ratios(fin: Financial[]): Ratios {
@@ -44,12 +48,16 @@ export async function getWatchlist(): Promise<WatchRow[]> {
   const histories = await Promise.all(items.map((i) => getPrices(i.ticker, 365)));
   return items.map((i, n) => {
     const p = byTicker.get(i.ticker);
+    const auto = ratios(fins.filter((f) => f.ticker === i.ticker));
     return {
       ...i,
       latest: p,
       history: histories[n].map((h) => h.close),
       upside: p && i.target_price ? (i.target_price / p.close - 1) * 100 : null,
-      ...ratios(fins.filter((f) => f.ticker === i.ticker)),
+      debtRatio: i.debt_ratio ?? auto.debtRatio,
+      reserveRatio: i.reserve_ratio ?? auto.reserveRatio,
+      autoDebtRatio: auto.debtRatio,
+      autoReserveRatio: auto.reserveRatio,
     };
   });
 }

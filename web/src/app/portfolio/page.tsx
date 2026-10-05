@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Card } from "@/components/Card";
 import { SetupNotice } from "@/components/SetupNotice";
+import { EditCell, StarButton } from "@/components/EditCell";
 import { Sparkline } from "@/components/Sparkline";
 import { changeColor, num, pct } from "@/lib/format";
 import { StockSearch } from "@/components/StockSearch";
@@ -38,14 +39,10 @@ function Kpi({ label, value, sub, color }: { label: string; value: string; sub?:
   );
 }
 
-// 텍스트 칸: 3줄까지만 보이고, 클릭하면 펼침
+// 텍스트 칸: 3줄까지만 보임. 누르면 전체 내용이 편집창에 열림
 function Clamp({ text }: { text: string | null | undefined }) {
   if (!text) return <span className="text-zinc-400">-</span>;
-  return (
-    <details className="group">
-      <summary className="cursor-pointer list-none whitespace-pre-line line-clamp-3 group-open:line-clamp-none">{text}</summary>
-    </details>
-  );
+  return <span className="line-clamp-3 whitespace-pre-line">{text}</span>;
 }
 
 function WeightCell({ weight, max }: { weight: number | null; max: number }) {
@@ -77,20 +74,39 @@ function Rows({ label, rows, total, max }: { label: string; rows: Holding[]; tot
               </td>
             )}
             <td className="px-2 py-2 text-zinc-500 tabular-nums">{h.ticker}</td>
-            <td className="px-2 py-2 whitespace-nowrap">{h.sector ?? "-"}</td>
             <td className="px-2 py-2 whitespace-nowrap">
+              <EditCell ticker={h.ticker} field="sector" value={h.sector}>
+                {h.sector ?? "-"}
+              </EditCell>
+            </td>
+            <td className="px-2 py-2 whitespace-nowrap">
+              <span className="mr-1 align-middle">
+                <StarButton ticker={h.ticker} starred={!!h.starred} />
+              </span>
               <Link href={`/stocks/${encodeURIComponent(h.ticker)}`} className="font-medium hover:underline">
                 {h.name}
               </Link>
             </td>
-            <td className={td}>{num(h.avg_price)}</td>
+            <td className={td}>
+              <EditCell ticker={h.ticker} field="avg_price" value={h.avg_price} kind="num">
+                {num(h.avg_price)}
+              </EditCell>
+            </td>
             <td className={td}>{num(h.latest?.close)}</td>
-            <td className={td}>{num(h.quantity, 4)}</td>
+            <td className={td}>
+              <EditCell ticker={h.ticker} field="quantity" value={h.quantity} kind="num">
+                {num(h.quantity, 4)}
+              </EditCell>
+            </td>
             <td className={td}>{num(h.evalKrw, 0)}</td>
             <td className={`${td} ${changeColor(h.pnlKrw)}`}>{signedWon(h.pnlKrw)}</td>
             <td className={`${td} ${changeColor(h.returnPct)}`}>{pct(h.returnPct)}</td>
             <WeightCell weight={h.weight} max={max} />
-            <td className={td}>{num(h.target_price)}</td>
+            <td className={td}>
+              <EditCell ticker={h.ticker} field="target_price" value={h.target_price} kind="num">
+                {num(h.target_price)}
+              </EditCell>
+            </td>
             <td className={td}>
               {reached ? (
                 <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
@@ -104,10 +120,14 @@ function Rows({ label, rows, total, max }: { label: string; rows: Holding[]; tot
               <Sparkline values={h.history} width={110} height={30} />
             </td>
             <td className={textCell}>
-              <Clamp text={h.idea} />
+              <EditCell ticker={h.ticker} field="idea" value={h.idea} kind="long">
+                <Clamp text={h.idea} />
+              </EditCell>
             </td>
             <td className={textCell}>
-              <Clamp text={h.sell_signal} />
+              <EditCell ticker={h.ticker} field="sell_signal" value={h.sell_signal} kind="long">
+                <Clamp text={h.sell_signal} />
+              </EditCell>
             </td>
           </tr>
         );
@@ -313,7 +333,7 @@ export default async function PortfolioPage() {
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-zinc-500">해외 종목의 매입금액·손익은 현재 환율로 환산함. 투자시나리오·매도 시그널은 클릭하면 전체가 보임.</p>
+        <p className="mt-2 text-xs text-zinc-500">해외 종목의 매입금액·손익은 현재 환율로 환산함. 섹터·매입단가·수량·목표주가·투자시나리오·매도 시그널은 칸을 누르면 바로 편집됨.</p>
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
