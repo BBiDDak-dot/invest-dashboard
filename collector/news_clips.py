@@ -83,29 +83,28 @@ KEYWORDS = {
     "제도": r"규제|법안|정책|표준|인증|허가|보조금|관세|가이드라인|regulat|standard|tariff|subsid|approval|FDA|rule",
 }
 
-SYSTEM = f"""너는 산업 애널리스트다. 기사 목록을 보고, 각 기사가 '산업에서 기술·수요·경쟁구도·돈 버는 방식이 어떻게 바뀌고 있는가'를 보여 주는지 판단한다.
-주가가 얼마나 움직였는지는 판단 기준이 아니다.
+SYSTEM = f"""너는 깐깐한 산업 애널리스트다. 기사 목록에서 '산업의 기술·수요·경쟁구도·돈 버는 방식이 실제로 바뀌었다'는 증거가 있는 기사만 골라낸다.
+대부분의 기사는 해당하지 않는다. 기사 10건 중 2~3건만 2점 이상이 되는 정도로 엄격하게 매긴다. 주가 움직임은 판단 기준이 아니다.
 
 변화 유형(category)은 다음 중 하나:
-- 수요: 고객의 구매 행동, 제품 대체, 새로운 사용처
+- 수요: 고객의 구매 행동 변화, 제품 대체, 새로운 사용처
 - 상용화: 기술의 실제 도입, 유료 고객 확보, 양산·현장 적용
 - 사업모델: 과금 방식, 유통 구조, 수익원 변화
 - 생산성: 원가, 생산 시간, 인력 투입, 공정 효율 변화
 - 경쟁·공급망: 신규 진입, 공급처 교체, 내재화, 시장 지배력 변화
-- 제도: 사업화에 영향을 주는 규제, 정책, 기술 표준
+- 제도: 사업화에 영향을 주는 규제·정책·기술 표준이 확정·시행됨
 - 없음: 위 어디에도 해당하지 않음
 
 점수(score):
-3 = 구체적 사실(고객·계약·수치·도입 사례·규정 내용)로 산업 구조 변화를 보여 줌
-2 = 변화의 신호지만 구체성이 약함
-1 = 일반 동향, 전망, 칼럼, 기업 홍보성 발표
-0 = 주가·시황·실적 숫자 나열, 인사·행사·사건사고·정치, 산업과 무관
+3 = 이미 일어난 구체적 사건이 산업 구조 변화를 보여 줌. 예: 고객사가 명시된 공급 계약·양산·도입, 과금·요금 체계 변경, 공급처 교체·내재화, 원가·수율·인력의 수치 변화, 확정·시행된 규제나 표준
+2 = 변화 방향이 분명한 신호. 예: 수치가 있는 산업 동향 분석, 정부의 구체적 제도 추진안, 신규 진입·투자 결정
+1 = 변화와 관련은 있으나 근거가 약함. 예: 신제품·신작 출시와 흥행 수치, MOU·협의체·행사, 전망·칼럼·인터뷰, 경영진 발언·사임, 연구 성과·수상, 해킹·사고·소송 진행 소식
+0 = 무관. 주가·시황·실적 숫자 나열, 프로모션·할인·이벤트, 인사·부고, 정치·사회·생활 기사, 부동산
 
 산업(industry)은 다음 중 하나: {", ".join(INDUSTRIES)}
-what: 무엇이 바뀌었는지 한국어 한 문장(70자 안). 주가 이야기는 넣지 말 것.
+what: 산업에서 무엇이 바뀌었는지 한국어 한 문장(70자 안). 기사 제목을 되풀이하지 말고 '누가 무엇을 어떻게 바꿨는지'를 쓴다. 주가 이야기는 넣지 않는다.
 title_ko: 제목의 한국어 번역 (한국어 기사는 원제목 그대로).
-companies: 기사의 핵심 회사 이름 (최대 3개, 한국어 표기).
-같은 회사만 반복되지 않도록, 대기업 소식이라도 구조 변화가 없으면 낮게 준다."""
+companies: 기사의 핵심 회사 이름 (최대 3개, 한국어 표기)."""
 
 SCHEMA = {
     "type": "ARRAY",
@@ -123,8 +122,8 @@ SCHEMA = {
         "required": ["i", "category", "industry", "score", "what", "title_ko", "companies"],
     },
 }
-MODELS = [os.environ.get("GEMINI_MODEL") or "gemini-flash-latest", "gemini-flash-lite-latest"]
-BATCH = 30
+MODELS = [os.environ.get("GEMINI_MODEL") or "gemini-flash-lite-latest", "gemini-flash-latest"]  # 무료 키는 Lite가 한도 여유가 큼
+BATCH = 80  # 호출 수를 줄여 무료 한도 아끼기
 
 
 def _clean(s: str | None, limit: int = 400) -> str:
@@ -224,18 +223,15 @@ def _gemini(key: str, items: list[dict]) -> tuple[list[dict], str]:
     }
     last = None
     for model in MODELS:
-        for wait in (0, 20):
+        for wait in (0, 60):  # 붐빔(503)·분당 한도(429)는 1분 쉬고 한 번 더
             time.sleep(wait)
             r = requests.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                 params={"key": key}, json=body, timeout=120,
             )
-            if r.status_code == 503:  # 붐빔: 같은 모델로 한 번 더
-                last = f"{model} 503"
+            if r.status_code in (429, 503):
+                last = f"{model} {r.status_code}"
                 continue
-            if r.status_code == 429:  # 한도 초과: 다음 모델
-                last = f"{model} 429"
-                break
             r.raise_for_status()
             data = r.json()
             text = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -263,11 +259,12 @@ def classify(items: list[dict]) -> None:
                             what=(r.get("what") or "").strip()[:200] or None, title_ko=(r.get("title_ko") or "").strip()[:300] or None,
                             companies=[c.strip() for c in r.get("companies", []) if c.strip()][:3], model=model,
                         )
-                time.sleep(6)  # 무료 한도(분당 요청 수) 안쪽으로
+                time.sleep(15)  # 무료 한도(분당 요청·토큰 수) 안쪽으로
             except Exception as e:
-                print(f"[클리핑] Gemini 실패, 이 묶음은 규칙으로: {e}")
-        for it in chunk:
-            if "model" not in it:
+                # 규칙 분류는 품질이 낮아서, 키가 있을 땐 저장하지 않고 다음 수집 때 다시 판단함
+                print(f"[클리핑] Gemini 실패, 이 묶음은 다음 수집 때 다시: {e}")
+        else:
+            for it in chunk:
                 it.update(rule_classify(it))
 
 
@@ -281,6 +278,8 @@ def collect() -> None:
     classify(new)
     rows = []
     for it in new:
+        if "model" not in it:  # 분류 못 한 기사
+            continue
         it["selected"] = it["category"] in CATEGORIES and it["score"] >= 2
         it["published_at"] = it["published_at"].isoformat() if it["published_at"] else None
         rows.append(it)
