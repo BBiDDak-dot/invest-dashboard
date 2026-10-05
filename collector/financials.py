@@ -5,6 +5,7 @@
 
 import datetime as dt
 import os
+import re
 
 import requests
 
@@ -45,6 +46,11 @@ def _dart_report(key: str, corp_code: str, year: int, reprt_code: str) -> dict |
     for i in items:
         if i.get("fs_div") != fs:
             continue
+        # 실제 기준일 (예: "2026.03.31 현재", "2026.01.01 ~ 2026.03.31").
+        # 보고서 코드와 기간이 어긋나게 공시된 경우(예: GRT)가 있어 이 날짜를 기준으로 삼음
+        m = re.findall(r"(\d{4})\.(\d{2})\.(\d{2})", i.get("thstrm_dt") or "")
+        if m and "end" not in out:
+            out["end"] = "-".join(m[-1])
         # 외국 기업(예: GRT)은 위안화 등 자국 통화로 공시함
         out.setdefault("currency", (i.get("currency") or "KRW").strip() or "KRW")
         name = i.get("account_nm", "").strip()
@@ -68,20 +74,18 @@ def _dart_report(key: str, corp_code: str, year: int, reprt_code: str) -> dict |
 
 
 def korea(key: str, ticker: str, corp_code: str, years: list[int]) -> list[dict]:
-    rows = []
-    today = dt.date.today().isoformat()
+    rows: dict[str, dict] = {}  # 기준일 → 행 (같은 기준일이 두 번 나오면 나중 것)
     for year in years:
         cum = {}  # 분기 번호 → 누적 값
         for code, q, md in REPORTS:
-            if f"{year}-{md}" > today:
-                continue  # 아직 끝나지 않은 분기 (정정공시 등이 섞여 들어오는 것 방지)
             rep = _dart_report(key, corp_code, year, code)
             if not rep:
                 continue
             cum[q] = rep["cum"]
+            end = rep.get("end") or f"{year}-{md}"
             row = {
                 "ticker": ticker,
-                "period_end": f"{year}-{md}",
+                "period_end": end,
                 "currency": rep.get("currency", "KRW"),
                 **{k: rep.get(k) for k in BS_NAMES.values()},
             }
@@ -94,8 +98,8 @@ def korea(key: str, ticker: str, corp_code: str, years: list[int]) -> list[dict]
                 now = rep["cum"].get(f)
                 prev = (cum.get(q - 1) or {}).get(f) if q > 1 else 0
                 row[f] = now - prev if now is not None and prev is not None else None
-            rows.append(row)
-    return rows
+            rows[end] = row
+    return [rows[k] for k in sorted(rows)]
 
 
 # ---------- 미국 (SEC) ----------
@@ -185,6 +189,11 @@ def collect(watchlist: list[dict]) -> None:
                 if not key or not w.get("corp_code"):
                     continue
                 rows = korea(key, w["ticker"], w["corp_code"], years)
+                if rows:
+                    # 이전 방식(보고서 코드로 기준일 추정)으로 잘못 저장된 분기 정리
+                    first = rows[0]["period_end"]
+                    keep = ",".join(r["period_end"] for r in rows)
+                    db.delete("financials_quarterly", f"ticker=eq.{w['ticker']}&period_end=gte.{first}&period_end=not.in.({keep})")
             else:
                 cik = ciks.get(w["ticker"]) or w.get("corp_code")
                 if not cik:
