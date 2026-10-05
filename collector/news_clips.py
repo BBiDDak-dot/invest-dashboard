@@ -85,6 +85,7 @@ KEYWORDS = {
 
 SYSTEM = f"""너는 깐깐한 산업 애널리스트다. 기사 목록에서 '산업의 기술·수요·경쟁구도·돈 버는 방식이 실제로 바뀌었다'는 증거가 있는 기사만 골라낸다.
 대부분의 기사는 해당하지 않는다. 기사 10건 중 2~3건만 2점 이상이 되는 정도로 엄격하게 매긴다. 주가 움직임은 판단 기준이 아니다.
+2점 이상인 기사만 응답에 넣는다. 응답에서 빠진 기사는 0점으로 처리한다.
 
 변화 유형(category)은 다음 중 하나:
 - 수요: 고객의 구매 행동 변화, 제품 대체, 새로운 사용처
@@ -259,6 +260,10 @@ def classify(items: list[dict]) -> None:
                             what=(r.get("what") or "").strip()[:200] or None, title_ko=(r.get("title_ko") or "").strip()[:300] or None,
                             companies=[c.strip() for c in r.get("companies", []) if c.strip()][:3], model=model,
                         )
+                # 응답에서 빠진 기사는 모델이 볼 가치 없다고 본 것 → 0점으로 저장해 다시 묻지 않음
+                for it in chunk:
+                    if "model" not in it:
+                        it.update(category="없음", industry="기타", score=0, what=None, title_ko=it["title"], companies=[], model=model)
                 time.sleep(15)  # 무료 한도(분당 요청·토큰 수) 안쪽으로
             except Exception as e:
                 # 규칙 분류는 품질이 낮아서, 키가 있을 땐 저장하지 않고 다음 수집 때 다시 판단함
