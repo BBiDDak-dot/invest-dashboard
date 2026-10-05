@@ -47,8 +47,8 @@ def collect(start: dt.date) -> None:
         while day <= dt.date.today():
             if day.weekday() < 5:
                 row = _fetch(market, day)
-                # 휴장일은 직전 영업일 값이 오므로 날짜로 중복 제거
-                if row:
+                # 휴장일은 0이나 직전 영업일 값이 오므로 0은 버리고 날짜로 중복 제거
+                if row and any(row[k] for k in ("individual", "foreigner", "institution")):
                     rows[row["date"]] = row
                 time.sleep(0.1)
             day += dt.timedelta(days=1)
