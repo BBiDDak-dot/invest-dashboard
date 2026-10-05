@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Card, Empty } from "@/components/Card";
 import { LineChart } from "@/components/LineChart";
 import { StockEditForm } from "@/components/StockEditForm";
+import { QuarterTable } from "@/components/QuarterTable";
 import { TtmCharts } from "@/components/TtmCharts";
 import { changeColor, num, pct } from "@/lib/format";
 import { getDisclosures, getFinancials, getPrices, getWatchItem, ratios } from "@/lib/queries";
@@ -17,7 +18,11 @@ export default async function StockPage({ params }: PageProps<"/stocks/[ticker]"
     item.market === "KR" ? getDisclosures(15, ticker) : Promise.resolve([]),
   ]);
   const last = prices.at(-1);
-  const { debtRatio, reserveRatio } = ratios(fin);
+  const auto = ratios(fin);
+  // 관심종목 표에서 직접 입력한 값이 있으면 그 값을 씀
+  const debtRatio = item.debt_ratio ?? auto.debtRatio;
+  const reserveRatio = item.reserve_ratio ?? auto.reserveRatio;
+  const currency = fin.find((f) => f.currency)?.currency;
   const upside = last && item.target_price ? (item.target_price / last.close - 1) * 100 : null;
 
   return (
@@ -53,8 +58,14 @@ export default async function StockPage({ params }: PageProps<"/stocks/[ticker]"
           height={220}
         />
       </Card>
-      <Card title="재무 추이">
-        <TtmCharts fin={fin} />
+      <Card title="재무">
+        <div className="space-y-5">
+          <TtmCharts fin={fin} />
+          <QuarterTable fin={fin} />
+          {currency && currency !== "KRW" && currency !== "USD" && (
+            <p className="text-xs text-zinc-500">이 회사는 재무제표를 {currency}로 공시함. 금액은 원화로 바꾸지 않고 공시 통화 그대로 표시함.</p>
+          )}
+        </div>
       </Card>
       <Card title="편집">
         <StockEditForm item={item} />
