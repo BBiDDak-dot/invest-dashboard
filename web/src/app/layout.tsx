@@ -6,7 +6,7 @@ import "./globals.css";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "투자 대시보드",
+  title: "삐딱인베스팅",
   description: "개인 맞춤형 투자 분석 대시보드",
 };
 

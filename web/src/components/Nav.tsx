@@ -17,7 +17,7 @@ export function Nav() {
     <header className="border-b border-zinc-200 dark:border-zinc-800">
       <nav className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
         <Link href="/" className="font-semibold">
-          투자 대시보드
+          삐딱인베스팅
         </Link>
         {links.map((l) => (
           <Link key={l.href} href={l.href} className="text-sm text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50">
