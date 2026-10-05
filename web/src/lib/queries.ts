@@ -95,7 +95,17 @@ const MACRO_ORDER = [
   "ISM:MANUFACTURING_PMI",
   "YF:CL=F",
   FX_SERIES,
+  "CNN:FEAR_GREED",
+  "FG:NASDAQ",
+  "FG:KOSPI",
+  "FG:KOSDAQ",
+  "KOFIA:CREDIT_KOSPI",
+  "KOFIA:CREDIT_KOSDAQ",
 ];
+
+// 심리 지표 (공포탐욕지수·신용잔고). 나머지는 경제 지표
+export const isSentiment = (id: string) => /^(CNN|FG|KOFIA):/.test(id);
+export const isFearGreed = (id: string) => /^(CNN|FG):/.test(id);
 
 export async function getMacro(days = 365 * 3): Promise<MacroRow[]> {
   const series = await select<MacroSeries>("macro_series", "select=*");

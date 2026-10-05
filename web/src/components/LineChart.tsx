@@ -9,6 +9,7 @@ type Props = {
   series: ChartSeries[];
   height?: number;
   decimals?: number; // 서버 컴포넌트에서 함수를 넘길 수 없어 소수 자릿수만 받음
+  domain?: [number, number]; // y축 범위 고정 (예: 공포탐욕지수 0~100)
 };
 
 const PAD = { top: 8, right: 8, bottom: 22, left: 56 };
@@ -25,7 +26,7 @@ function ticks(min: number, max: number, count = 4) {
 }
 
 // 단일 y축 선 그래프. 마우스를 올리면 해당 시점의 값을 보여줌.
-export function LineChart({ labels, series, height = 200, decimals = 1 }: Props) {
+export function LineChart({ labels, series, height = 200, decimals = 1, domain }: Props) {
   const format = (v: number) => v.toLocaleString("ko-KR", { maximumFractionDigits: decimals });
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0); // 실제 폭을 잰 뒤에 그림 (휴대폰에서 화면 밖으로 넘치지 않게)
@@ -44,7 +45,7 @@ export function LineChart({ labels, series, height = 200, decimals = 1 }: Props)
     return <p className="py-6 text-center text-sm text-zinc-500">데이터 없음</p>;
   }
 
-  const yt = ticks(Math.min(...all), Math.max(...all));
+  const yt = domain ? ticks(domain[0], domain[1]) : ticks(Math.min(...all), Math.max(...all));
   const lo = Math.min(yt[0], ...all);
   const hi = Math.max(yt.at(-1)!, ...all);
   const w = width - PAD.left - PAD.right;
