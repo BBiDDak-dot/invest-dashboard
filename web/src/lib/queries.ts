@@ -1,6 +1,7 @@
 import {
   inList,
   select,
+  selectAll,
   type Disclosure,
   type Financial,
   type MacroObservation,
@@ -92,7 +93,7 @@ export async function getMacro(days = 365 * 3): Promise<MacroRow[]> {
   series.sort((a, b) => rank(a.series_id) - rank(b.series_id));
   return Promise.all(
     series.map(async (s) => {
-      const history = await select<MacroObservation>(
+      const history = await selectAll<MacroObservation>(
         "macro_observations",
         `select=series_id,date,value&series_id=eq.${encodeURIComponent(s.series_id)}&date=gte.${daysAgo(days)}&order=date`,
       );

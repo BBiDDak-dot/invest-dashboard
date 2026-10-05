@@ -23,6 +23,16 @@ export async function select<T>(table: string, query = ""): Promise<T[]> {
   return (await call(`/rest/v1/${table}?${query}`)).json();
 }
 
+// PostgREST는 한 번에 최대 1000행만 돌려주므로 1000행씩 나눠 끝까지 읽음
+export async function selectAll<T>(table: string, query = ""): Promise<T[]> {
+  const rows: T[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const page = await select<T>(table, `${query}&limit=1000&offset=${offset}`);
+    rows.push(...page);
+    if (page.length < 1000) return rows;
+  }
+}
+
 export async function insert<T>(table: string, rows: object | object[], { upsert = false } = {}): Promise<T[]> {
   const res = await call(`/rest/v1/${table}`, {
     method: "POST",
