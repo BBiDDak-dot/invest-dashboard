@@ -109,8 +109,30 @@ export async function updateStock(_: ActionState, form: FormData): Promise<Actio
       risk: textOrNull(form.get("risk")),
       sell_signal: textOrNull(form.get("sell_signal")),
       sort_order: numOrNull(form.get("sort_order")) ?? 0,
+      avg_price: numOrNull(form.get("avg_price")),
+      quantity: numOrNull(form.get("quantity")),
     };
     await update("watchlist", `ticker=eq.${encodeURIComponent(ticker)}`, patch);
+    revalidatePath("/", "layout");
+  });
+}
+
+// 포트폴리오: 매입단가·보유수량 저장 (수량 0이면 포트폴리오에서 빠짐)
+export async function saveHolding(_: ActionState, form: FormData): Promise<ActionState> {
+  return run(async () => {
+    const ticker = String(form.get("ticker") ?? "");
+    if (!ticker) throw new Error("종목을 고를 것");
+    await update("watchlist", `ticker=eq.${encodeURIComponent(ticker)}`, {
+      avg_price: numOrNull(form.get("avg_price")),
+      quantity: numOrNull(form.get("quantity")),
+    });
+    revalidatePath("/", "layout");
+  });
+}
+
+export async function saveCash(_: ActionState, form: FormData): Promise<ActionState> {
+  return run(async () => {
+    await insert("settings", { key: "cash_krw", value: numOrNull(form.get("cash")) ?? 0 }, { upsert: true });
     revalidatePath("/", "layout");
   });
 }

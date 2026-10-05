@@ -84,6 +84,8 @@ export type WatchItem = {
   risk: string | null;
   sell_signal: string | null;
   sort_order: number;
+  avg_price?: number | null;
+  quantity?: number | null;
 };
 
 export type Security = {

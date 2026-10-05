@@ -119,3 +119,33 @@ export async function getReport(id: string): Promise<Report | undefined> {
   if (!/^[0-9a-f-]{36}$/.test(id)) return undefined;
   return (await select<Report>("reports", `select=*&id=eq.${id}`))[0];
 }
+
+// ---------- 포트폴리오 ----------
+
+export type Holding = WatchRow & { evalKrw: number | null; returnPct: number | null; weight: number | null };
+export type Portfolio = { holdings: Holding[]; cash: number; fx: MacroObservation | undefined; total: number };
+
+export async function getCash(): Promise<number> {
+  try {
+    const rows = await select<{ value: number }>("settings", "select=value&key=eq.cash_krw");
+    return Number(rows[0]?.value ?? 0);
+  } catch {
+    return 0; // 003_portfolio.sql 실행 전
+  }
+}
+
+export async function getPortfolio(): Promise<Portfolio> {
+  const [rows, fx, cash] = await Promise.all([getWatchlist(), getFx(), getCash()]);
+  const rate = fx?.value ?? null;
+  const held = rows.filter((r) => (r.quantity ?? 0) > 0);
+  const priced = held.map((r) => {
+    const price = r.latest?.close;
+    const toKrw = r.market === "US" ? rate : 1;
+    const evalKrw = price != null && toKrw != null ? price * r.quantity! * toKrw : null;
+    const returnPct = price != null && r.avg_price ? (price / r.avg_price - 1) * 100 : null;
+    return { ...r, evalKrw, returnPct };
+  });
+  const total = priced.reduce((s, h) => s + (h.evalKrw ?? 0), 0) + cash;
+  const holdings = priced.map((h) => ({ ...h, weight: total && h.evalKrw != null ? (h.evalKrw / total) * 100 : null }));
+  return { holdings, cash, fx, total };
+}
