@@ -92,7 +92,8 @@ export function LineChart({ labels, series, height = 200, decimals = 1 }: Props)
             textAnchor={i === 0 ? "start" : i === labels.length - 1 ? "end" : "middle"}
             className="fill-zinc-500 text-[10px]"
           >
-            {labels[i]}
+            {/* 날짜는 축에 연-월만 표시 (툴팁은 전체 날짜) */}
+            {/^\d{4}-\d{2}-\d{2}$/.test(labels[i]) ? labels[i].slice(0, 7) : labels[i]}
           </text>
         ))}
         {series.map((s) => (

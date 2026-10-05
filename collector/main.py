@@ -34,7 +34,7 @@ def main() -> None:
     for name, job in [
         ("시세", lambda: prices.collect(start, watchlist)),
         ("공시", lambda: disclosures.collect(start, watchlist)),
-        ("경제지표", lambda: macro.collect(start)),
+        ("투자지표", lambda: macro.collect(start)),
         ("재무", lambda: financials.collect(watchlist)),
         ("수급", lambda: flows.collect(start)),
     ]:
