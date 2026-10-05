@@ -3,6 +3,7 @@ import {
   select,
   selectAll,
   type Disclosure,
+  type EarningsRow,
   type Financial,
   type MacroObservation,
   type MacroSeries,
@@ -17,7 +18,7 @@ import {
 
 const FX_SERIES = "YF:KRW=X"; // 원/달러 환율 (관심종목 화면 상단에도 표시)
 
-const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10);
+export const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10);
 
 export type Ratios = { debtRatio: number | null; reserveRatio: number | null };
 // debtRatio·reserveRatio는 직접 입력값 우선, auto*는 재무제표 계산값
@@ -158,6 +159,10 @@ export async function getStockFlows(days: number): Promise<{ from: string; to: s
   const from = dates.at(-1)!.date;
   const rows = await selectAll<StockFlow>("stock_flows", `select=code,date,name,market,foreigner,institution&date=gte.${from}&order=code,date`);
   return { from, to: dates[0].date, rows };
+}
+
+export async function getEarnings(days: number): Promise<EarningsRow[]> {
+  return selectAll<EarningsRow>("earnings_screen", `select=*&date=gte.${daysAgo(days)}&order=date.desc,id.desc`);
 }
 
 export async function getReports(limit = 60): Promise<Omit<Report, "summary">[]> {

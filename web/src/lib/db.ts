@@ -190,6 +190,33 @@ export type StockFlow = {
   institution: number | null;
 };
 
+export type EarningsRow = {
+  id: string;
+  date: string;
+  stock_code: string | null;
+  corp_name: string;
+  market: "KOSPI" | "KOSDAQ" | null;
+  title: string;
+  period: string | null;
+  consolidated: boolean | null;
+  corrected: boolean | null;
+  url: string;
+  revenue: number | null;
+  revenue_prev_q: number | null;
+  revenue_qoq: number | null;
+  revenue_prev_y: number | null;
+  revenue_yoy: number | null;
+  revenue_turn: string | null;
+  op: number | null;
+  op_prev_q: number | null;
+  op_qoq: number | null;
+  op_prev_y: number | null;
+  op_yoy: number | null;
+  op_turn: string | null;
+  note: string | null;
+  note_updated_at: string | null;
+};
+
 export type Report = {
   id: string;
   created_at: string;

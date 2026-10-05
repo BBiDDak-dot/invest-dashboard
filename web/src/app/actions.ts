@@ -196,6 +196,19 @@ export async function saveNewsNote(
   return state;
 }
 
+// ---------- 실적 스크리닝 ----------
+
+export async function saveEarningsNote(id: string, note: string): Promise<ActionState> {
+  const state = await run(async () => {
+    if (!/^\d{14}$/.test(id)) throw new Error("잘못된 공시 번호");
+    const text = note.trim();
+    await update("earnings_screen", `id=eq.${id}`, { note: text || null, note_updated_at: text ? new Date().toISOString() : null });
+    return text ? "저장됨" : "메모 삭제됨";
+  });
+  if (!state?.error) revalidatePath("/earnings");
+  return state;
+}
+
 // ---------- 리포트 ----------
 
 export async function prepareReportUpload(names: string[]): Promise<{ uploads?: { path: string; url: string }[]; error?: string }> {

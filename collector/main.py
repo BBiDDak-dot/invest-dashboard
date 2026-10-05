@@ -8,6 +8,7 @@ import sys
 import cleanup
 import db
 import disclosures
+import earnings
 import financials
 import flows
 import stock_flows
@@ -36,6 +37,7 @@ def main() -> None:
     for name, job in [
         ("시세", lambda: prices.collect(start, watchlist)),
         ("공시", lambda: disclosures.collect(start, watchlist)),
+        ("실적 스크리닝", lambda: earnings.collect(start)),
         ("투자지표", lambda: macro.collect(start)),
         ("재무", lambda: financials.collect(watchlist)),
         ("수급", lambda: flows.collect(start)),
