@@ -10,6 +10,7 @@ import db
 import disclosures
 import financials
 import flows
+import stock_flows
 import macro
 import prices
 
@@ -38,6 +39,7 @@ def main() -> None:
         ("투자지표", lambda: macro.collect(start)),
         ("재무", lambda: financials.collect(watchlist)),
         ("수급", lambda: flows.collect(start)),
+        ("종목 수급", stock_flows.collect),
         ("PDF 정리", cleanup.collect),
     ]:
         try:

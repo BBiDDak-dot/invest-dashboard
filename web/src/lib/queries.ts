@@ -10,6 +10,7 @@ import {
   type NewsNote,
   type Price,
   type Report,
+  type StockFlow,
   type SignalDisclosure,
   type WatchItem,
 } from "./db";
@@ -138,6 +139,15 @@ export async function getNewsNote(id: string): Promise<NewsNote | null> {
 
 export async function getFlows(market: MarketFlow["market"], days: number): Promise<MarketFlow[]> {
   return select<MarketFlow>("market_flows", `select=*&market=eq.${market}&date=gte.${daysAgo(days)}&order=date`);
+}
+
+// 최근 n영업일 종목별 순매수 (영업일은 늘 수집 대상인 삼성전자 날짜로 셈)
+export async function getStockFlows(days: number): Promise<{ from: string; to: string; rows: StockFlow[] } | null> {
+  const dates = await select<{ date: string }>("stock_flows", `select=date&code=eq.005930&order=date.desc&limit=${days}`);
+  if (dates.length === 0) return null;
+  const from = dates.at(-1)!.date;
+  const rows = await selectAll<StockFlow>("stock_flows", `select=code,date,name,market,foreigner,institution&date=gte.${from}&order=code,date`);
+  return { from, to: dates[0].date, rows };
 }
 
 export async function getReports(limit = 60): Promise<Omit<Report, "summary">[]> {
