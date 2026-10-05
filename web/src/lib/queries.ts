@@ -9,6 +9,7 @@ import {
   type MarketFlow,
   type Price,
   type Report,
+  type SignalDisclosure,
   type WatchItem,
 } from "./db";
 
@@ -113,6 +114,15 @@ export async function getMacro(days = 365 * 3): Promise<MacroRow[]> {
 export async function getDisclosures(limit = 20, ticker?: string): Promise<Disclosure[]> {
   const filter = ticker ? `&ticker=eq.${encodeURIComponent(ticker)}` : "";
   return select<Disclosure>("disclosures", `select=*${filter}&order=date.desc&limit=${limit}`);
+}
+
+export async function getDisclosuresSince(days: number): Promise<Disclosure[]> {
+  return select<Disclosure>("disclosures", `select=*&date=gte.${daysAgo(days)}&order=date.desc,id.desc&limit=500`);
+}
+
+export async function getSignalDisclosures(days: number, category?: string): Promise<SignalDisclosure[]> {
+  const cat = category ? `&category=eq.${encodeURIComponent(category)}` : "";
+  return selectAll<SignalDisclosure>("signal_disclosures", `select=*&date=gte.${daysAgo(days)}${cat}&order=date.desc,id.desc`);
 }
 
 export async function getFlows(market: MarketFlow["market"], days: number): Promise<MarketFlow[]> {
