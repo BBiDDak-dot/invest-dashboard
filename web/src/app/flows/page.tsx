@@ -64,7 +64,7 @@ export default async function FlowsPage({ searchParams }: PageProps<"/flows">) {
       <SetupNotice />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-lg font-semibold">수급</h1>
-        <div className="flex gap-1 text-sm">
+        <div className="flex flex-wrap gap-1 text-sm">
           {(Object.keys(RANGES) as Range[]).map((k) => (
             <Link
               key={k}

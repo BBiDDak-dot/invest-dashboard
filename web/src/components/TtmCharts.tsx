@@ -15,7 +15,7 @@ export function TtmCharts({ fin, height = 180 }: { fin: Financial[]; height?: nu
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {charts.map((c) => (
-        <div key={c.title}>
+        <div key={c.title} className="min-w-0">
           <div className="mb-1 text-xs text-zinc-500">
             {c.title} · {unit.label}
           </div>
