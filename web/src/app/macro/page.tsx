@@ -4,11 +4,11 @@ import { SetupNotice } from "@/components/SetupNotice";
 import { getMacro } from "@/lib/queries";
 
 export default async function MacroPage() {
-  const rows = await getMacro(36);
+  const rows = await getMacro();
   return (
     <>
       <SetupNotice />
-      <Card title="경제지표 (최근 36개 관측치)">
+      <Card title="투자 지표 (최근 3년)">
         <MacroGrid rows={rows} />
       </Card>
     </>

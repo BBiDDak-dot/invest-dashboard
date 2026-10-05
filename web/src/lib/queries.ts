@@ -11,7 +11,7 @@ import {
   type WatchItem,
 } from "./db";
 
-const FX_SERIES = "FRED:DEXKOUS"; // 원/달러 환율: 관심종목 화면에만 표시
+const FX_SERIES = "FRED:DEXKOUS"; // 원/달러 환율 (관심종목 화면 상단에도 표시)
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10);
 
@@ -75,15 +75,28 @@ export async function getFx(): Promise<MacroObservation | undefined> {
 
 export type MacroRow = MacroSeries & { history: MacroObservation[] };
 
-export async function getMacro(points = 24): Promise<MacroRow[]> {
-  const series = await select<MacroSeries>("macro_series", `select=*&series_id=neq.${FX_SERIES}&order=country,series_id`);
+// 화면 표시 순서 (없는 지표는 뒤로)
+const MACRO_ORDER = [
+  "FRED:DGS10",
+  "FRED:FEDFUNDS",
+  "FRED:T10YIE",
+  "FRED:CPILFESL",
+  "ISM:MANUFACTURING_PMI",
+  "FRED:DCOILWTICO",
+  FX_SERIES,
+];
+
+export async function getMacro(days = 365 * 3): Promise<MacroRow[]> {
+  const series = await select<MacroSeries>("macro_series", "select=*");
+  const rank = (id: string) => (MACRO_ORDER.indexOf(id) + 1 || 99);
+  series.sort((a, b) => rank(a.series_id) - rank(b.series_id));
   return Promise.all(
     series.map(async (s) => {
-      const obs = await select<MacroObservation>(
+      const history = await select<MacroObservation>(
         "macro_observations",
-        `select=series_id,date,value&series_id=eq.${encodeURIComponent(s.series_id)}&order=date.desc&limit=${points}`,
+        `select=series_id,date,value&series_id=eq.${encodeURIComponent(s.series_id)}&date=gte.${daysAgo(days)}&order=date`,
       );
-      return { ...s, history: obs.reverse() };
+      return { ...s, history };
     }),
   );
 }

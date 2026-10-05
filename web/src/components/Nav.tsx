@@ -5,7 +5,7 @@ const links = [
   { href: "/", label: "요약" },
   { href: "/watchlist", label: "관심종목" },
   { href: "/financials", label: "재무" },
-  { href: "/macro", label: "경제지표" },
+  { href: "/macro", label: "투자 지표" },
   { href: "/flows", label: "수급" },
   { href: "/reports", label: "리포트" },
 ];

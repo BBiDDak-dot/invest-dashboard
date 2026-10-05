@@ -1,14 +1,12 @@
-"""수집할 경제지표 목록. 필요한 지표는 여기에 추가함."""
+"""수집할 투자 지표 목록. 필요한 지표는 여기에 추가함."""
 
-# FRED 시리즈 ID: https://fred.stlouisfed.org 에서 검색
+# (FRED 시리즈 ID, 이름, 단위, 변환)  https://fred.stlouisfed.org 에서 검색
+# 변환: None=원값, "pc1"=전년 동월 대비 변화율(%)
 FRED_SERIES = [
-    ("DGS10", "미국 10년물 국채금리", "%"),
-    ("FEDFUNDS", "미국 기준금리", "%"),
-    ("T10YIE", "미국 10년 기대인플레이션(BEI)", "%"),
-    # 하이퍼스케일러 CDS는 무료 공개 데이터가 없어 신용등급별 회사채 스프레드로 대신함
-    # AA: MSFT·GOOGL·AMZN·META 수준, BBB: ORCL 수준
-    ("BAMLC0A2CAA", "AA등급 회사채 스프레드 (CDS 대용)", "%p"),
-    ("BAMLC0A4CBBB", "BBB등급 회사채 스프레드 (CDS 대용)", "%p"),
-    # 관심종목 화면 상단 환율 표시용 (경제지표 화면에서는 숨김)
-    ("DEXKOUS", "원/달러 환율", "원"),
+    ("DGS10", "미국 10년물 국채금리", "%", None),
+    ("FEDFUNDS", "미국 기준금리", "%", None),
+    ("T10YIE", "미국 10년 기대인플레이션(BEI)", "%", None),
+    ("CPILFESL", "미국 Core CPI (전년 대비)", "%", "pc1"),
+    ("DCOILWTICO", "WTI 유가", "달러/배럴", None),
+    ("DEXKOUS", "원/달러 환율", "원", None),
 ]

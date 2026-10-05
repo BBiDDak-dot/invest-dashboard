@@ -6,14 +6,14 @@ import { WatchTable } from "@/components/WatchTable";
 import { getDisclosures, getMacro, getWatchlist } from "@/lib/queries";
 
 export default async function Home() {
-  const [watch, macro, disclosures] = await Promise.all([getWatchlist(), getMacro(12), getDisclosures(10)]);
+  const [watch, macro, disclosures] = await Promise.all([getWatchlist(), getMacro(), getDisclosures(10)]);
   return (
     <>
       <SetupNotice />
       <Card title="관심종목">
         <WatchTable rows={watch} />
       </Card>
-      <Card title="주요 경제지표">
+      <Card title="투자 지표 (최근 3년)">
         <MacroGrid rows={macro} />
       </Card>
       <Card title="최근 공시">

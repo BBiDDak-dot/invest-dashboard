@@ -1,4 +1,4 @@
-"""경제지표 수집: FRED, ISM(미국)."""
+"""투자 지표 수집: FRED, ISM(미국)."""
 
 import datetime as dt
 import os
@@ -15,12 +15,11 @@ def collect_fred(start: dt.date) -> None:
     if not key:
         print("FRED_API_KEY 없음, FRED 건너뜀")
         return
-    for sid, name, unit in FRED_SERIES:
-        r = requests.get(
-            "https://api.stlouisfed.org/fred/series/observations",
-            params={"series_id": sid, "api_key": key, "file_type": "json", "observation_start": start.isoformat()},
-            timeout=30,
-        )
+    for sid, name, unit, units in FRED_SERIES:
+        params = {"series_id": sid, "api_key": key, "file_type": "json", "observation_start": start.isoformat()}
+        if units:
+            params["units"] = units
+        r = requests.get("https://api.stlouisfed.org/fred/series/observations", params=params, timeout=30)
         r.raise_for_status()
         series_id = f"FRED:{sid}"
         db.upsert("macro_series", [{"series_id": series_id, "source": "FRED", "name": name, "unit": unit, "country": "US"}])
@@ -32,9 +31,13 @@ def collect_fred(start: dt.date) -> None:
         db.upsert("macro_observations", obs)
 
 
+HISTORY_DAYS = 1100  # 화면에서 3년치를 보여주므로 항상 3년 이상 받음 (새 지표도 바로 채워짐)
+
+
 def collect(start: dt.date) -> None:
+    start = min(start, dt.date.today() - dt.timedelta(days=HISTORY_DAYS))
     collect_fred(start)
     ism.collect(start)
     # config에서 뺀 지표는 DB에서도 지움 (관측치는 cascade로 함께 삭제)
-    keep = [f"FRED:{sid}" for sid, _, _ in FRED_SERIES] + [ism.SERIES_ID]
+    keep = [f"FRED:{sid}" for sid, *_ in FRED_SERIES] + [ism.SERIES_ID]
     db.delete("macro_series", "series_id=not.in.(" + ",".join(f'"{k}"' for k in keep) + ")")
