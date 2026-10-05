@@ -126,6 +126,18 @@ export type Disclosure = {
   url: string;
 };
 
+// 뉴스 기사에 단 내 메모
+export type NewsNote = {
+  id: string;
+  title: string;
+  url: string;
+  source: string | null;
+  summary: string | null;
+  news_time: string | null;
+  note: string;
+  updated_at: string;
+};
+
 // 전체 상장사 중 투자 시그널 공시 (전자공시 탭)
 export type SignalDisclosure = {
   id: string;
