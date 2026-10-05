@@ -126,6 +126,20 @@ export type Disclosure = {
   url: string;
 };
 
+// 전체 상장사 중 투자 시그널 공시 (전자공시 탭)
+export type SignalDisclosure = {
+  id: string;
+  date: string;
+  stock_code: string | null;
+  corp_name: string;
+  market: string | null;
+  category: string;
+  title: string;
+  note: string | null;
+  direction: "buy" | "sell" | null;
+  url: string;
+};
+
 export type Financial = {
   ticker: string;
   period_end: string;

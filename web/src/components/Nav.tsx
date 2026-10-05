@@ -8,6 +8,7 @@ const links = [
   { href: "/macro", label: "투자 지표" },
   { href: "/flows", label: "수급" },
   { href: "/news", label: "뉴스" },
+  { href: "/disclosures", label: "공시" },
   { href: "/reports", label: "리포트" },
 ];
 

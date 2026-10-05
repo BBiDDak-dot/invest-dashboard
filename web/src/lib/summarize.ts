@@ -2,8 +2,11 @@ import "server-only";
 import { ApiError, GoogleGenAI, type Part } from "@google/genai";
 import type { WatchItem } from "./db";
 
-// 무료 한도가 넉넉한 Gemini API(Google AI Studio 키) 사용. Pro가 한도 초과·과부하면 Flash로 다시 시도함.
-const MODELS = [process.env.GEMINI_MODEL || "gemini-pro-latest", "gemini-flash-latest"];
+// 무료 한도가 넉넉한 Gemini API(Google AI Studio 키) 사용. Pro가 한도 초과·과부하면 Flash → Flash-Lite 순으로 다시 시도함.
+const MODELS = [process.env.GEMINI_MODEL || "gemini-pro-latest", "gemini-flash-latest", "gemini-flash-lite-latest"];
+// 과부하(503)는 보통 잠깐이라 모델마다 잠시 기다렸다 한 번 더 시도함
+const RETRY_WAIT_MS = [0, 4000];
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const SYSTEM = `너는 한국 개인 투자자의 리서치 보조임. 사용자가 그날 받은 증권사 리포트(PDF)와 투자 유튜브 영상을 보고 한 페이지 분량의 브리핑을 한국어 마크다운으로 작성함.
 
@@ -52,26 +55,35 @@ export async function summarizeReports(sources: Source[], watch: WatchItem[]) {
 
   let lastError: unknown;
   for (const model of MODELS) {
-    try {
-      const res = await ai.models.generateContent({
-        model,
-        contents: [{ role: "user", parts }],
-        config: { systemInstruction: SYSTEM },
-      });
-      const text = res.text?.trim();
-      if (!text) throw new Error(`요약 결과가 비어 있음 (${res.candidates?.[0]?.finishReason ?? "원인 불명"})`);
-      return { text, model: res.modelVersion ?? model };
-    } catch (e) {
-      lastError = e;
-      // 한도 초과(429)·과부하(503)일 때만 다음 모델로 넘어감
-      if (e instanceof ApiError && (e.status === 429 || e.status === 503)) continue;
-      break;
+    for (const wait of RETRY_WAIT_MS) {
+      if (wait) await sleep(wait);
+      try {
+        const res = await ai.models.generateContent({
+          model,
+          contents: [{ role: "user", parts }],
+          config: { systemInstruction: SYSTEM },
+        });
+        const text = res.text?.trim();
+        if (!text) throw new Error(`요약 결과가 비어 있음 (${res.candidates?.[0]?.finishReason ?? "원인 불명"})`);
+        return { text, model: res.modelVersion ?? model };
+      } catch (e) {
+        lastError = e;
+        // 과부하(503)는 같은 모델로 한 번 더, 한도 초과(429)는 바로 다음 모델로. 그 밖의 오류는 중단
+        if (e instanceof ApiError && e.status === 503) continue;
+        if (e instanceof ApiError && e.status === 429) break;
+        throw friendly(e);
+      }
     }
   }
-  if (lastError instanceof ApiError) {
-    if (lastError.status === 429) throw new Error("Gemini 무료 한도 초과, 잠시 후 다시 시도");
-    if (lastError.status === 400 || lastError.status === 403) throw new Error(`Gemini 요청 오류 (${lastError.status}): ${lastError.message}`);
-    throw new Error(`Gemini API 오류 (${lastError.status}): ${lastError.message}`);
+  throw friendly(lastError);
+}
+
+function friendly(e: unknown): Error {
+  if (e instanceof ApiError) {
+    if (e.status === 429) return new Error("Gemini 무료 한도 초과, 잠시 후 다시 시도");
+    if (e.status === 503) return new Error("Gemini 서버가 붐벼서 모든 모델이 거절함 (일시적). 몇 분 뒤 다시 시도");
+    if (e.status === 400 || e.status === 403) return new Error(`Gemini 요청 오류 (${e.status}): ${e.message}`);
+    return new Error(`Gemini API 오류 (${e.status}): ${e.message}`);
   }
-  throw lastError;
+  return e instanceof Error ? e : new Error(String(e));
 }
