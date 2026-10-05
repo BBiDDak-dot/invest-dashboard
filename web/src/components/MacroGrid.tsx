@@ -1,5 +1,5 @@
 import { num } from "@/lib/format";
-import type { MacroRow } from "@/lib/queries";
+import { isFearGreed, type MacroRow } from "@/lib/queries";
 import { Empty } from "./Card";
 import { LineChart } from "./LineChart";
 
@@ -30,6 +30,7 @@ export function MacroGrid({ rows }: { rows: MacroRow[] }) {
               series={[{ name: s.name, color: "var(--series-1)", values: s.history.map((h) => h.value) }]}
               height={240}
               decimals={2}
+              domain={isFearGreed(s.series_id) ? [0, 100] : undefined}
             />
           </div>
         );

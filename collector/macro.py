@@ -7,6 +7,7 @@ import requests
 
 import db
 import ism
+import sentiment
 import yfinance as yf
 
 from config import FRED_SERIES, YAHOO_SERIES
@@ -56,5 +57,6 @@ def collect(start: dt.date) -> None:
     collect_yahoo(start)
     ism.collect(start)
     # config에서 뺀 지표는 DB에서도 지움 (관측치는 cascade로 함께 삭제)
-    keep = [f"FRED:{sid}" for sid, *_ in FRED_SERIES] + [f"YF:{s}" for s, *_ in YAHOO_SERIES] + [ism.SERIES_ID]
+    keep = [f"FRED:{sid}" for sid, *_ in FRED_SERIES] + [f"YF:{s}" for s, *_ in YAHOO_SERIES] + [ism.SERIES_ID] + sentiment.SERIES_IDS
     db.delete("macro_series", "series_id=not.in.(" + ",".join(f'"{k}"' for k in keep) + ")")
+    sentiment.collect(start)
