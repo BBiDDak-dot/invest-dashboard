@@ -5,8 +5,6 @@ import { SetupNotice } from "@/components/SetupNotice";
 import { WatchTable } from "@/components/WatchTable";
 import { getDisclosures, getMacro, getWatchlist } from "@/lib/queries";
 
-export const revalidate = 3600;
-
 export default async function Home() {
   const [watch, macro, disclosures] = await Promise.all([getWatchlist(), getMacro(12), getDisclosures(10)]);
   return (

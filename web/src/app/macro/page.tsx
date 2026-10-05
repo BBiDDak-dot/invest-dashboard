@@ -3,8 +3,6 @@ import { MacroGrid } from "@/components/MacroGrid";
 import { SetupNotice } from "@/components/SetupNotice";
 import { getMacro } from "@/lib/queries";
 
-export const revalidate = 3600;
-
 export default async function MacroPage() {
   const rows = await getMacro(36);
   return (

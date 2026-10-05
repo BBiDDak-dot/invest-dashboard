@@ -14,7 +14,7 @@ def collect(start: dt.date, watchlist: list[dict]) -> None:
         print("DART_API_KEY 없음, 공시 건너뜀")
         return
     for w in watchlist:
-        if not w.get("corp_code"):
+        if w["market"] != "KR" or not w.get("corp_code"):
             continue
         r = requests.get(
             "https://opendart.fss.or.kr/api/list.json",

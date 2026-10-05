@@ -7,6 +7,8 @@ import sys
 
 import db
 import disclosures
+import financials
+import flows
 import macro
 import prices
 
@@ -33,6 +35,8 @@ def main() -> None:
         ("시세", lambda: prices.collect(start, watchlist)),
         ("공시", lambda: disclosures.collect(start, watchlist)),
         ("경제지표", lambda: macro.collect(start)),
+        ("재무", lambda: financials.collect(watchlist)),
+        ("수급", lambda: flows.collect(start)),
     ]:
         try:
             job()
