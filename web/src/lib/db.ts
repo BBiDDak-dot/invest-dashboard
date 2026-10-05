@@ -181,6 +181,15 @@ export type MarketFlow = {
   institution: number | null;
 };
 
+export type StockFlow = {
+  code: string;
+  date: string;
+  name: string;
+  market: "KOSPI" | "KOSDAQ";
+  foreigner: number | null;
+  institution: number | null;
+};
+
 export type Report = {
   id: string;
   created_at: string;
