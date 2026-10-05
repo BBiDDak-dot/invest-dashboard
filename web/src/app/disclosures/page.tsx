@@ -4,7 +4,7 @@ import type { Disclosure, SignalDisclosure } from "@/lib/db";
 import { getDisclosuresSince, getSignalDisclosures, getWatchItems } from "@/lib/queries";
 
 // 수집기(collector/disclosures.py)의 분류와 같은 순서
-const CATEGORIES = ["실적", "수주·계약", "내부자 매매", "자사주·배당", "증자·CB", "M&A·지배구조", "위험", "5% 지분"];
+const CATEGORIES = ["실적", "수주·계약", "내부자 매수", "자사주", "증자·CB", "M&A·지배구조", "5% 지분"];
 const DAYS = 14;
 const NOISY = "5% 지분"; // 운용사 정기 보고가 대부분이라 전체 보기에선 뺌 (칩을 누르면 볼 수 있음)
 
@@ -128,7 +128,7 @@ export default async function DisclosuresPage({ searchParams }: PageProps<"/disc
           <Empty>해당하는 공시가 없음. 수집기가 돌면 채워짐.</Empty>
         ) : (
           <>
-            <p className="mb-3 text-xs text-zinc-500">★ 노란 줄은 내 관심종목. 내부자 매매는 빨강=매수, 파랑=매도. 정정 공시와 주식 수 변동 없는 보고는 뺐고, 5% 지분 공시는 칩을 눌러야 보임.</p>
+            <p className="mb-3 text-xs text-zinc-500">★ 노란 줄은 내 관심종목. 내부자는 매수만 모음. 정정·배당·위험 공시는 뺐고, 5% 지분 공시는 칩을 눌러야 보임.</p>
             <DateGroups rows={rows} render={(d) => <SignalRow d={d} watched={!!d.stock_code && watched.has(d.stock_code)} />} />
           </>
         )}

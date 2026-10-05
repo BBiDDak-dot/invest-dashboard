@@ -130,6 +130,12 @@ export async function getNewsNotes(): Promise<NewsNote[]> {
   return select<NewsNote>("news_notes", "select=*&order=updated_at.desc&limit=500");
 }
 
+// 기사 하나의 메모 (없으면 null)
+export async function getNewsNote(id: string): Promise<NewsNote | null> {
+  const [row] = await select<NewsNote>("news_notes", `select=*&id=eq.${encodeURIComponent(id)}`);
+  return row ?? null;
+}
+
 export async function getFlows(market: MarketFlow["market"], days: number): Promise<MarketFlow[]> {
   return select<MarketFlow>("market_flows", `select=*&market=eq.${market}&date=gte.${daysAgo(days)}&order=date`);
 }

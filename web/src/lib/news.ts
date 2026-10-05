@@ -71,3 +71,66 @@ export function newsTime(t: string) {
   if (t.length < 12) return "";
   return `${t.slice(4, 6)}/${t.slice(6, 8)} ${t.slice(8, 10)}:${t.slice(10, 12)}`;
 }
+
+// ---------- 기사 전문 (네이버 뉴스 기사 페이지를 읽어 본문만 추림) ----------
+
+export type ArticleBlock = { kind: "text" | "caption"; text: string } | { kind: "img"; src: string };
+export type Article = { item: NewsItem; lead: string | null; blocks: ArticleBlock[] };
+
+const ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", apos: "'", nbsp: " ", "#x3D": "=",
+  hellip: "…", middot: "·", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", ndash: "–", mdash: "—",
+};
+const decode = (s: string) =>
+  s
+    .replace(/&(#39|#x3D|[a-z]+);/g, (m, k) => ENTITIES[k] ?? m)
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)));
+const strip = (s: string) => decode(s.replace(/<[^>]+>/g, ""));
+const meta = (html: string, prop: string) =>
+  html.match(new RegExp(`<meta[^>]+(?:property|name)="${prop}"[^>]+content="([^"]*)"`))?.[1] ?? null;
+
+export const isArticleId = (id: string) => /^\d{3}-\d{10}$/.test(id);
+
+export async function getArticle(id: string): Promise<Article | null> {
+  if (!isArticleId(id)) return null;
+  const [oid, aid] = id.split("-");
+  const url = `https://n.news.naver.com/mnews/article/${oid}/${aid}`;
+  const r = await fetch(url, { headers: HEADERS, next: { revalidate: 86400 } });
+  if (!r.ok) throw new Error(`${r.status}`);
+  const html = await r.text();
+  const body = html.match(/<article[^>]*id="dic_area"[^>]*>([\s\S]*?)<\/article>/)?.[1];
+  if (!body) return null;
+
+  const lead = body.match(/<strong class="media_end_summary">([\s\S]*?)<\/strong>/)?.[1];
+  // 사진은 표시용 자리표시로 바꾸고, 줄바꿈 태그는 줄바꿈으로, 나머지 태그는 지움
+  const flat = body
+    .replace(/<strong class="media_end_summary">[\s\S]*?<\/strong>/, "")
+    .replace(/<img[^>]+data-src="([^"]+)"[^>]*>/g, (_, src) => `\n@@IMG ${decode(src)}\n`)
+    .replace(/<em class="img_desc">([\s\S]*?)<\/em>/g, (_, t) => `\n@@CAP ${strip(t)}\n`)
+    .replace(/<br\s*\/?>/g, "\n")
+    .replace(/<\/(p|div)>/g, "\n");
+  const blocks: ArticleBlock[] = [];
+  for (const raw of strip(flat).split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith("@@IMG ")) blocks.push({ kind: "img", src: line.slice(6) });
+    else if (line.startsWith("@@CAP ")) blocks.push({ kind: "caption", text: line.slice(6) });
+    else blocks.push({ kind: "text", text: line });
+  }
+
+  const time = html.match(/media_end_head_info_datestamp_time[^>]+data-date-time="([^"]+)"/)?.[1] ?? "";
+  return {
+    item: {
+      id,
+      title: decode(meta(html, "og:title") ?? strip(html.match(/media_end_head_headline[^>]*>([\s\S]*?)<\//)?.[1] ?? "")),
+      summary: decode(meta(html, "og:description") ?? ""),
+      source: decode(meta(html, "og:article:author") ?? meta(html, "twitter:creator") ?? ""),
+      time: time.replace(/\D/g, "").slice(0, 12),
+      url,
+      thumb: null,
+    },
+    lead: lead ? strip(lead.replace(/<br\s*\/?>/g, "\n")).trim() : null,
+    blocks,
+  };
+}
