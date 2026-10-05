@@ -13,7 +13,8 @@ import requests
 
 import db
 
-SEC_HEADERS = {"User-Agent": "invest-dashboard personal research (github.com/BBiDDak-dot)"}
+# SEC는 "이름 연락처메일" 형식의 User-Agent가 없으면 403을 돌려줌
+SEC_HEADERS = {"User-Agent": "invest-dashboard admin@example.com"}
 
 
 def korea() -> list[dict]:
