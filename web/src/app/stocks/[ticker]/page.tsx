@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { Card, Empty } from "@/components/Card";
 import { LineChart } from "@/components/LineChart";
 import { StockEditForm } from "@/components/StockEditForm";
+import { NewsList } from "@/components/NewsList";
 import { QuarterTable } from "@/components/QuarterTable";
+import { getStockNews } from "@/lib/news";
 import { TtmCharts } from "@/components/TtmCharts";
 import { changeColor, num, pct } from "@/lib/format";
 import { getDisclosures, getFinancials, getPrices, getWatchItem, ratios } from "@/lib/queries";
@@ -12,10 +14,11 @@ export default async function StockPage({ params }: PageProps<"/stocks/[ticker]"
   const ticker = decodeURIComponent((await params).ticker);
   const item = await getWatchItem(ticker);
   if (!item) notFound();
-  const [prices, fin, disclosures] = await Promise.all([
+  const [prices, fin, disclosures, news] = await Promise.all([
     getPrices(ticker, 365),
     getFinancials([ticker]),
     item.market === "KR" ? getDisclosures(15, ticker) : Promise.resolve([]),
+    item.market === "KR" ? getStockNews(ticker, 8).catch(() => []) : Promise.resolve([]),
   ]);
   const last = prices.at(-1);
   const auto = ratios(fin);
@@ -70,6 +73,11 @@ export default async function StockPage({ params }: PageProps<"/stocks/[ticker]"
       <Card title="편집">
         <StockEditForm item={item} />
       </Card>
+      {item.market === "KR" && (
+        <Card title="종목 뉴스 (네이버 증권)">
+          <NewsList items={news} thumbs={false} />
+        </Card>
+      )}
       {item.market === "KR" && (
         <Card title="최근 공시">
           {disclosures.length === 0 ? (
