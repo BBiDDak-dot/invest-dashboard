@@ -7,6 +7,7 @@ const links = [
   { href: "/watchlist", label: "관심종목" },
   { href: "/macro", label: "투자 지표" },
   { href: "/flows", label: "수급" },
+  { href: "/news", label: "뉴스" },
   { href: "/reports", label: "리포트" },
 ];
 
