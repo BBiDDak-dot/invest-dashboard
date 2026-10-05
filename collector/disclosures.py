@@ -21,7 +21,7 @@ DART_LIST = "https://opendart.fss.or.kr/api/list.json"
 SIGNALS: list[tuple[str, list[str]]] = [
     ("실적", ["매출액또는손익구조", "영업(잠정)실적", "잠정실적"]),
     ("수주·계약", ["단일판매ㆍ공급계약", "단일판매·공급계약"]),
-    ("내부자 매수", ["임원ㆍ주요주주특정증권등소유상황보고서", "임원·주요주주특정증권등소유상황보고서"]),
+    ("내부자 매매", ["임원ㆍ주요주주특정증권등소유상황보고서", "임원·주요주주특정증권등소유상황보고서"]),
     ("자사주", ["자기주식취득", "자기주식처분", "자기주식소각", "주식소각결정"]),
     ("증자·CB", ["유상증자결정", "무상증자결정", "전환사채권발행결정", "신주인수권부사채권발행결정", "교환사채권발행결정"]),
     ("M&A·지배구조", ["최대주주변경", "최대주주 변경", "합병결정", "분할결정", "분할합병결정", "공개매수", "영업양수", "영업양도", "타법인주식및출자증권취득결정", "타법인주식및출자증권양도결정"]),
@@ -163,12 +163,12 @@ def signals(key: str, start: dt.date) -> None:
                 if not cat:
                     continue
                 note, direction = None, None
-                if cat == "내부자 매수":
+                if cat == "내부자 매매":
                     info = _insider(key, d["corp_code"], d["rcept_no"])
                     chg = _num(info.get("sp_stock_lmp_irds_cnt")) if info else None
-                    if chg is None or chg <= 0:
-                        continue  # 매수만 봄 (매도·증감 없는 보고는 양이 많고 시그널이 약함)
-                    direction = "buy"
+                    if chg is None or chg == 0:
+                        continue  # 증감 없는 보고(신규 선임 등)는 시그널 아님
+                    direction = "buy" if chg > 0 else "sell"
                     who = " ".join(x for x in [info.get("repror"), info.get("isu_exctv_ofcps")] if x and x != "-")
                     note = f"{who} {'매수' if chg > 0 else '매도'} {abs(chg):,.0f}주".strip()
                 elif "해지" in title or "취소" in title:
@@ -187,8 +187,8 @@ def signals(key: str, start: dt.date) -> None:
                 })
         day += dt.timedelta(days=1)
     db.upsert("signal_disclosures", rows)
-    # 분류에서 뺀 것(위험·배당·내부자 매도)과 이름이 바뀐 분류는 지움 (다시 수집하면 새 이름으로 채워짐)
-    for q in ["category=eq.위험", "category=eq.자사주·배당", "category=eq.내부자 매매"]:
+    # 분류에서 뺀 것(위험·배당)과 이름이 바뀐 분류는 지움 (다시 수집하면 새 이름으로 채워짐)
+    for q in ["category=eq.위험", "category=eq.자사주·배당"]:
         db.delete("signal_disclosures", q)
     # 90일 지난 것은 정리
     db.delete("signal_disclosures", f"date=lt.{(end - dt.timedelta(days=90)).isoformat()}")
