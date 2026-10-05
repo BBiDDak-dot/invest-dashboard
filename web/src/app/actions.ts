@@ -234,13 +234,17 @@ export async function createReportSummary(
     const sources = [...pdfs, ...links.map((u) => ({ name: u, youtube: u }))];
     const { text, model } = await summarizeReports(sources, watch);
     const title = text.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? null;
-    const [row] = await insert<{ id: string }>("reports", {
+    const base = {
       report_date: /^\d{4}-\d{2}-\d{2}$/.test(reportDate) ? reportDate : undefined,
       file_names: sources.map((s) => s.name),
       title,
       summary: text,
       model,
-    });
+    };
+    // 원본 PDF 경로도 저장 (007 SQL을 아직 안 돌렸으면 경로 없이 저장)
+    const [row] = await insert<{ id: string }>("reports", { ...base, file_paths: files.map((f) => f.path) }).catch(() =>
+      insert<{ id: string }>("reports", base),
+    );
     revalidatePath("/reports");
     return { id: row.id };
   } catch (e) {
