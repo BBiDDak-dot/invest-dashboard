@@ -197,36 +197,38 @@ function Candidates({ rows }: { rows: WatchRow[] }) {
   const list = [...rows].sort((a, b) => (b.upside ?? -Infinity) - (a.upside ?? -Infinity));
   if (!list.length) return <p className="text-sm text-zinc-500">관심종목을 모두 보유 중임.</p>;
   return (
-    <table className="w-full text-sm">
-      <thead className="text-left text-xs text-zinc-500">
-        <tr className="border-b border-zinc-200 dark:border-zinc-800">
-          <th className={th}>종목명</th>
-          <th className={th}>섹터</th>
-          <th className={`${th} text-right`}>현재가</th>
-          <th className={`${th} text-right`}>목표주가</th>
-          <th className={`${th} text-right`}>상승여력</th>
-          <th className={th}>1년</th>
-        </tr>
-      </thead>
-      <tbody>
-        {list.map((r) => (
-          <tr key={r.ticker} className="border-b border-zinc-100 dark:border-zinc-900">
-            <td className="px-2 py-1.5 whitespace-nowrap">
-              <Link href={`/stocks/${encodeURIComponent(r.ticker)}`} className="font-medium hover:underline">
-                {r.name}
-              </Link>
-            </td>
-            <td className="px-2 py-1.5 text-xs whitespace-nowrap text-zinc-500">{r.sector ?? "-"}</td>
-            <td className={`${td} py-1.5`}>{num(r.latest?.close)}</td>
-            <td className={`${td} py-1.5`}>{num(r.target_price)}</td>
-            <td className={`${td} py-1.5 ${changeColor(r.upside)}`}>{pct(r.upside)}</td>
-            <td className="px-2 py-1.5 text-zinc-500">
-              <Sparkline values={r.history} width={80} height={24} />
-            </td>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="text-left text-xs text-zinc-500">
+          <tr className="border-b border-zinc-200 dark:border-zinc-800">
+            <th className={th}>종목명</th>
+            <th className={th}>섹터</th>
+            <th className={`${th} text-right`}>현재가</th>
+            <th className={`${th} text-right`}>목표주가</th>
+            <th className={`${th} text-right`}>상승여력</th>
+            <th className={th}>1년</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {list.map((r) => (
+            <tr key={r.ticker} className="border-b border-zinc-100 dark:border-zinc-900">
+              <td className="px-2 py-1.5 whitespace-nowrap">
+                <Link href={`/stocks/${encodeURIComponent(r.ticker)}`} className="font-medium hover:underline">
+                  {r.name}
+                </Link>
+              </td>
+              <td className="px-2 py-1.5 text-xs whitespace-nowrap text-zinc-500">{r.sector ?? "-"}</td>
+              <td className={`${td} py-1.5`}>{num(r.latest?.close)}</td>
+              <td className={`${td} py-1.5`}>{num(r.target_price)}</td>
+              <td className={`${td} py-1.5 ${changeColor(r.upside)}`}>{pct(r.upside)}</td>
+              <td className="px-2 py-1.5 text-zinc-500">
+                <Sparkline values={r.history} width={80} height={24} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

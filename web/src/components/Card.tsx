@@ -1,6 +1,6 @@
 export function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+    <section className="min-w-0 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
       <h2 className="mb-3 text-sm font-medium text-zinc-500">{title}</h2>
       {children}
     </section>
