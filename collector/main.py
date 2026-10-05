@@ -5,6 +5,7 @@ import datetime as dt
 import os
 import sys
 
+import cleanup
 import db
 import disclosures
 import financials
@@ -37,6 +38,7 @@ def main() -> None:
         ("투자지표", lambda: macro.collect(start)),
         ("재무", lambda: financials.collect(watchlist)),
         ("수급", lambda: flows.collect(start)),
+        ("PDF 정리", cleanup.collect),
     ]:
         try:
             job()
