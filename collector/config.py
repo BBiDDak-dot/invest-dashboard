@@ -4,6 +4,9 @@
 FRED_SERIES = [
     ("DGS10", "미국 10년물 국채금리", "%"),
     ("FEDFUNDS", "미국 기준금리", "%"),
-    ("CPIAUCSL", "미국 CPI", "지수"),
-    ("UNRATE", "미국 실업률", "%"),
+    ("T10YIE", "미국 10년 기대인플레이션(BEI)", "%"),
+    # 하이퍼스케일러 CDS는 무료 공개 데이터가 없어 신용등급별 회사채 스프레드로 대신함
+    # AA: MSFT·GOOGL·AMZN·META 수준, BBB: ORCL 수준
+    ("BAMLC0A2CAA", "AA등급 회사채 스프레드 (CDS 대용)", "%p"),
+    ("BAMLC0A4CBBB", "BBB등급 회사채 스프레드 (CDS 대용)", "%p"),
 ]

@@ -1,4 +1,4 @@
-"""경제지표 수집: FRED(미국)."""
+"""경제지표 수집: FRED, ISM(미국)."""
 
 import datetime as dt
 import os
@@ -6,6 +6,7 @@ import os
 import requests
 
 import db
+import ism
 from config import FRED_SERIES
 
 
@@ -33,3 +34,7 @@ def collect_fred(start: dt.date) -> None:
 
 def collect(start: dt.date) -> None:
     collect_fred(start)
+    ism.collect(start)
+    # config에서 뺀 지표는 DB에서도 지움 (관측치는 cascade로 함께 삭제)
+    keep = [f"FRED:{sid}" for sid, _, _ in FRED_SERIES] + [ism.SERIES_ID]
+    db.delete("macro_series", "series_id=not.in.(" + ",".join(f'"{k}"' for k in keep) + ")")
