@@ -36,7 +36,7 @@ export function EarningsNote({ id, note }: { id: string; note: string | null }) 
             if (e.key === "Escape") setEditing(false);
             else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) save();
           }}
-          placeholder="실적 코멘트 (비우고 저장하면 삭제)"
+          placeholder="실적이 왜 늘었는지 메모 (비우고 저장하면 삭제)"
           className="w-full rounded border border-amber-400 bg-white px-2 py-1.5 text-sm text-zinc-900 outline-none dark:bg-zinc-900 dark:text-zinc-100"
         />
         <div className="mt-1 flex items-center gap-2 text-xs">

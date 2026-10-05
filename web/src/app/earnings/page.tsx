@@ -4,7 +4,7 @@ import { EarningsNote } from "@/components/EarningsNote";
 import { SetupNotice } from "@/components/SetupNotice";
 import type { EarningsRow } from "@/lib/db";
 import { changeColor, num } from "@/lib/format";
-import { getEarnings, getWatchItems } from "@/lib/queries";
+import { daysAgo, getEarnings, getWatchItems } from "@/lib/queries";
 
 const DAYS = { "7": "1주", "30": "1개월", "90": "3개월" } as const;
 const VIEWS = { grow: "동반 성장", all: "전체", memo: "메모" } as const;
@@ -16,17 +16,22 @@ const DEFAULTS: Params = { days: "30", view: "grow", min: "0", sort: "date" };
 const chip = (on: boolean) =>
   `rounded-md px-2.5 py-1 ${on ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"}`;
 
-// 같은 회사·같은 분기 공시가 여러 건(정정, 연결·별도)이면 연결 기준 최신 것 하나만
-function dedupe(rows: EarningsRow[]) {
-  const best = new Map<string, EarningsRow>();
+// 같은 회사·같은 분기 공시가 여러 건(잠정실적, 정기보고서, 정정)이면 가장 먼저 나온 공시 하나만.
+// 같은 날 여러 건이면 연결 기준을 고름
+function firstDisclosures(rows: EarningsRow[]) {
+  const first = new Map<string, EarningsRow>();
+  const earlier = (a: EarningsRow, b: EarningsRow) =>
+    a.date !== b.date ? a.date < b.date : a.consolidated !== b.consolidated ? !!a.consolidated : a.id < b.id;
   for (const r of rows) {
     const k = `${r.stock_code ?? r.corp_name}|${r.period ?? r.date}`;
-    const cur = best.get(k);
-    const score = (x: EarningsRow) => `${x.consolidated ? 1 : 0}${x.id}`;
-    if (!cur || score(r) > score(cur)) best.set(k, r);
+    const cur = first.get(k);
+    if (!cur || earlier(r, cur)) first.set(k, r);
   }
-  return [...best.values()];
+  return [...first.values()];
 }
+
+// 공시 종류: 잠정실적 / 분기보고서 / 반기보고서 / 사업보고서
+const kind = (title: string) => (title.includes("잠정") ? "잠정실적" : (title.match(/분기보고서|반기보고서|사업보고서/)?.[0] ?? "공시"));
 
 // 기준: 분기 실적의 전년 동기 대비(YoY). 영업이익이 적자→흑자로 돌아선 경우도 성장으로 봄
 const turned = (r: EarningsRow) => (r.op_turn ?? "").includes("흑자");
@@ -60,7 +65,7 @@ function Item({ r, watch }: { r: EarningsRow; watch: Set<string> }) {
           <span className="font-medium">{r.corp_name}</span>
         )}
         <span className="text-xs text-zinc-500">
-          {r.market} · {r.period ?? "-"} · {r.consolidated ? "연결" : "별도"} · {r.date}
+          {r.market} · {r.period ?? "-"} · {r.consolidated ? "연결" : "별도"} · {kind(r.title)} {r.date}
         </span>
         <a href={r.url} target="_blank" rel="noreferrer" className="text-xs text-zinc-400 underline hover:text-zinc-600">
           공시 원문
@@ -95,9 +100,11 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
     if (typeof v === "string" && v in opts) (p as Record<string, string>)[k] = v;
   }
   const href = (patch: Partial<Params>) => `/earnings?${new URLSearchParams({ ...p, ...patch })}`;
-  const [all, watchItems] = await Promise.all([getEarnings(Number(p.days)), getWatchItems()]);
+  // 기간 앞쪽에 먼저 나온 잠정실적이 있으면 그게 최초 공시라서, 넉 달 더 앞까지 읽어 최초 공시를 고른 뒤 기간으로 거름
+  const [all, watchItems] = await Promise.all([getEarnings(Number(p.days) + 120), getWatchItems()]);
   const watch = new Set(watchItems.filter((w) => w.market === "KR").map((w) => w.ticker));
-  const rows = dedupe(all);
+  const cutoff = daysAgo(Number(p.days));
+  const rows = firstDisclosures(all).filter((r) => r.date >= cutoff);
   let shown = p.view === "grow" ? rows.filter((r) => grows(r, p)) : p.view === "memo" ? rows.filter((r) => r.note) : rows;
   if (p.sort === "op") shown = [...shown].sort((a, b) => (b.op_yoy ?? -Infinity) - (a.op_yoy ?? -Infinity));
   const group = (label: string, opts: Record<string, string>, key: keyof Params) => (
@@ -115,7 +122,7 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
     <>
       <SetupNotice />
       <h1 className="text-lg font-semibold">실적 스크리닝</h1>
-      <Card title="잠정실적 공시 (코스피·코스닥)">
+      <Card title="분기 실적 최초 공시 (코스피·코스닥)">
         <div className="mb-3 space-y-2">
           {group("보기", VIEWS, "view")}
           {group("기간", DAYS, "days")}
@@ -123,12 +130,12 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
           {group("정렬", SORTS, "sort")}
         </div>
         <p className="mb-2 text-xs text-zinc-500">
-          {shown.length}개 기업 (기간 내 잠정실적 {rows.length}개 기업 중)
+          {shown.length}개 기업 (기간 내 실적 공시 {rows.length}개 기업 중)
           {p.view === "grow" && ` · 분기 매출액과 영업이익이 모두 전년 동기 대비 ${p.min}% 넘게 늘었거나 영업이익이 흑자전환한 곳`}
         </p>
         {shown.length === 0 ? (
           <Empty>
-            {all.length === 0 ? "아직 수집된 잠정실적 공시가 없음. 수집기가 평일마다 새 공시를 읽어 옴." : "조건에 맞는 기업이 없음."}
+            {all.length === 0 ? "아직 수집된 실적 공시가 없음. 수집기가 평일마다 새 공시를 읽어 옴." : "조건에 맞는 기업이 없음."}
           </Empty>
         ) : (
           <ul className="divide-y divide-zinc-100 dark:divide-zinc-900">
@@ -138,7 +145,7 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
           </ul>
         )}
         <p className="mt-3 text-xs text-zinc-400">
-          DART 영업(잠정)실적(공정공시) 원문 표에서 뽑은 당해 분기 실적(분기는 공시 날짜로 정함). 금액은 억원. 자회사 실적 공시는 제외. 같은 회사·분기 공시가 여러 건이면 연결 기준 최신 공시 하나만 보여 줌.
+          DART 영업(잠정)실적 공시와 분기·반기·사업보고서 중 회사·분기마다 가장 먼저 나온 공시의 해당 분기(3개월) 실적. 4분기는 연간에서 3분기 누적을 뺀 값. 금액은 억원. 자회사 실적 공시와 12월 결산이 아닌 회사의 정기보고서는 제외.
         </p>
       </Card>
     </>

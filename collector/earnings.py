@@ -1,7 +1,9 @@
-"""실적 스크리닝: 코스피·코스닥 상장사의 영업(잠정)실적(공정공시)에서 매출액·영업이익을 뽑음.
+"""실적 스크리닝: 코스피·코스닥 상장사의 분기 실적 공시에서 매출액·영업이익을 뽑음.
 
-DART 공시 목록에서 잠정실적 공시를 찾고, 원문(document.xml)의 표준 서식 표를 읽어
-당기·전기(직전 분기)·전년동기 값과 증감률을 earnings_screen 테이블에 저장함.
+1) 영업(잠정)실적(공정공시): 원문(document.xml)의 표준 서식 표에서 당기·전기·전년동기 값.
+2) 분기·반기·사업보고서: 잠정실적을 내지 않는 회사도 있어 정기보고서도 저장함.
+   DART 다중회사 주요계정(fnlttMultiAcnt)으로 100개사씩 읽음. 4분기는 연간 - 3분기 누적.
+화면에서는 종목·분기마다 가장 먼저 나온 공시를 씀.
 """
 
 import datetime as dt
@@ -10,6 +12,7 @@ import io
 import os
 import re
 import zipfile
+from collections import defaultdict
 
 import requests
 
@@ -17,6 +20,10 @@ import db
 
 DART = "https://opendart.fss.or.kr/api"
 KEEP_DAYS = 400
+REVENUE_NAMES = {"매출액", "수익(매출액)", "영업수익", "매출", "매출액(수익)"}
+OP_NAMES = {"영업이익", "영업이익(손실)", "영업손실"}
+# 정기보고서 제목 → 보고서 코드. 12월 결산 회사만 (다른 결산월은 분기가 어긋나 건너뜀)
+REPORT_CODES = {("분기보고서", 3): "11013", ("반기보고서", 6): "11012", ("분기보고서", 9): "11014", ("사업보고서", 12): "11011"}
 
 
 def _text(s: str) -> str:
@@ -72,18 +79,121 @@ def _document(key: str, rcept_no: str) -> str:
     return "".join(zf.read(n).decode("utf-8", "replace") for n in zf.namelist())
 
 
-def _list(key: str, day: dt.date, cls: str) -> list[dict]:
+def _list(key: str, day: dt.date, cls: str, ty: str = "I") -> list[dict]:
     out, page = [], 1
     while True:
         r = requests.get(
             f"{DART}/list.json",
-            params={"crtfc_key": key, "bgn_de": day.strftime("%Y%m%d"), "end_de": day.strftime("%Y%m%d"), "corp_cls": cls, "pblntf_ty": "I", "page_no": page, "page_count": 100},
+            params={"crtfc_key": key, "bgn_de": day.strftime("%Y%m%d"), "end_de": day.strftime("%Y%m%d"), "corp_cls": cls, "pblntf_ty": ty, "page_no": page, "page_count": 100},
             timeout=30,
         ).json()
         out += r.get("list", [])
         if page >= int(r.get("total_page", 1) or 1):
             return out
         page += 1
+
+
+def _amount(s) -> float | None:
+    try:
+        return float((s or "").replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _multi(key: str, corp_codes: list[str], year: int, reprt_code: str) -> dict[str, dict]:
+    """여러 회사 주요계정 → {corp_code: {"revenue": {...}, "op": {...}}}. 연결 우선, 없으면 별도."""
+    out: dict[str, dict] = {}
+    for i in range(0, len(corp_codes), 100):
+        r = requests.get(
+            f"{DART}/fnlttMultiAcnt.json",
+            params={"crtfc_key": key, "corp_code": ",".join(corp_codes[i : i + 100]), "bsns_year": str(year), "reprt_code": reprt_code},
+            timeout=120,
+        ).json()
+        by_fs: dict[str, dict[str, dict]] = defaultdict(lambda: defaultdict(dict))
+        for it in r.get("list", []):
+            if it.get("sj_div") != "IS":
+                continue
+            name = (it.get("account_nm") or "").strip()
+            field = "revenue" if name in REVENUE_NAMES else "op" if name in OP_NAMES else None
+            if field and field not in by_fs[it["corp_code"]][it.get("fs_div")]:
+                by_fs[it["corp_code"]][it.get("fs_div")][field] = it
+        for code, fs in by_fs.items():
+            pick = fs.get("CFS") if len(fs.get("CFS", {})) == 2 else fs.get("OFS")
+            if pick and len(pick) == 2:
+                out[code] = {**pick, "fs": "CFS" if pick is fs.get("CFS") else "OFS"}
+    return out
+
+
+def _growth(now: float | None, prev: float | None) -> tuple[float | None, str | None]:
+    """전년 대비 증감률(%)과 흑자·적자 전환 표시 (잠정실적 서식과 같은 말)"""
+    if now is None or prev is None:
+        return None, None
+    if prev > 0:
+        return round((now - prev) / prev * 100, 1), ("적자전환" if now < 0 else None)
+    if prev < 0:
+        return None, ("흑자전환" if now > 0 else "적자지속")
+    return None, None
+
+
+def periodic(key: str, start: dt.date, done: set[str], end: dt.date | None = None) -> list[dict]:
+    """분기·반기·사업보고서 최초 제출본 → 해당 분기(3개월) 매출액·영업이익과 전년 동기"""
+    filings = []
+    day = start
+    while day <= (end or dt.date.today()):
+        for cls in ("Y", "K"):
+            for d in _list(key, day, cls, "A"):
+                # 기재정정·첨부추가 등 [..]이 붙은 건 최초 제출본이 아님
+                m = re.match(r"^(분기보고서|반기보고서|사업보고서)\s*\((\d{4})\.(\d{2})\)", d["report_nm"].strip())
+                code = m and REPORT_CODES.get((m.group(1), int(m.group(3))))
+                if code and d["rcept_no"] not in done:
+                    filings.append((d, cls, int(m.group(2)), code))
+        day += dt.timedelta(days=1)
+
+    groups: dict[tuple[int, str], list[str]] = defaultdict(list)
+    for d, _, year, code in filings:
+        groups[(year, code)].append(d["corp_code"])
+    values = {g: _multi(key, codes, *g) for g, codes in groups.items()}
+    # 4분기 = 연간 - 3분기 누적 (3분기보고서의 누적 금액)
+    cum3 = {year: _multi(key, codes, year, "11014") for (year, code), codes in groups.items() if code == "11011"}
+
+    rows = []
+    for d, cls, year, code in filings:
+        v = values[(year, code)].get(d["corp_code"])
+        if not v:
+            continue
+        row = {}
+        for f in ("revenue", "op"):
+            now, prev = _amount(v[f].get("thstrm_amount")), _amount(v[f].get("frmtrm_amount"))
+            if code == "11011":
+                c = cum3.get(year, {}).get(d["corp_code"])
+                if not c or c["fs"] != v["fs"]:
+                    now = prev = None
+                else:
+                    a, b = _amount(c[f].get("thstrm_add_amount")), _amount(c[f].get("frmtrm_add_amount"))
+                    now = now - a if now is not None and a is not None else None
+                    prev = prev - b if prev is not None and b is not None else None
+            yoy, turn = _growth(now, prev)
+            row[f] = round(now / 1e8, 1) if now is not None else None  # 억원
+            row[f + "_prev_y"] = round(prev / 1e8, 1) if prev is not None else None
+            row[f + "_yoy"], row[f + "_turn"] = yoy, turn
+        if row["revenue"] is None or row["op"] is None:
+            continue
+        q = {"11013": 1, "11012": 2, "11014": 3, "11011": 4}[code]
+        rows.append({
+            "id": d["rcept_no"],
+            "date": f"{d['rcept_dt'][:4]}-{d['rcept_dt'][4:6]}-{d['rcept_dt'][6:]}",
+            "stock_code": d.get("stock_code") or None,
+            "corp_name": d["corp_name"],
+            "market": "KOSPI" if cls == "Y" else "KOSDAQ",
+            "title": d["report_nm"].strip(),
+            "consolidated": v["fs"] == "CFS",
+            "corrected": False,
+            "url": f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={d['rcept_no']}",
+            "period": f"{year}.{q}Q",
+            **row,
+        })
+    print(f"정기보고서: {len(filings)}건 중 {len(rows)}건 수치 읽음")
+    return rows
 
 
 def collect(start: dt.date) -> None:
@@ -123,6 +233,7 @@ def collect(start: dt.date) -> None:
                     **v,
                 })
         day += dt.timedelta(days=1)
+    rows += periodic(key, start, done)
     db.upsert("earnings_screen", rows)
     print(f"실적 스크리닝: {len(rows)}건 저장, 표를 못 읽은 공시 {skipped}건")
     db.delete("earnings_screen", f"date=lt.{(dt.date.today() - dt.timedelta(days=KEEP_DAYS)).isoformat()}")

@@ -18,7 +18,7 @@ import {
 
 const FX_SERIES = "YF:KRW=X"; // 원/달러 환율 (관심종목 화면 상단에도 표시)
 
-const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10);
+export const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10);
 
 export type Ratios = { debtRatio: number | null; reserveRatio: number | null };
 // debtRatio·reserveRatio는 직접 입력값 우선, auto*는 재무제표 계산값
