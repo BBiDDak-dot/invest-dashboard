@@ -39,14 +39,22 @@ export function ReportUpload({ today }: { today: string }) {
       }
     }
 
-    setStatus({ text: `Gemini가 ${files.length + youtube.length}건을 읽고 요약하는 중… (1~3분 걸림)` });
-    const result = await createReportSummary(
-      uploads.map((u, i) => ({ path: u.path, name: files[i].name })),
-      youtube,
-      date,
-    );
-    if (!result.id) return setStatus({ text: result.error ?? "요약 실패", error: true });
-    router.push(`/reports/${result.id}`);
+    // 리포트(PDF)는 파일마다 한 장씩, 유튜브 링크는 모두 합쳐 한 장으로 요약 (동시에 요청)
+    const jobs = [
+      ...uploads.map((u, i) => ({ label: files[i].name, files: [{ path: u.path, name: files[i].name }], youtube: [] as string[] })),
+      ...(youtube.length ? [{ label: `유튜브 ${youtube.length}건`, files: [], youtube }] : []),
+    ];
+    setStatus({ text: `Gemini가 요약하는 중… (${jobs.length}장, 1~3분 걸림)` });
+    const results = await Promise.all(jobs.map((j) => createReportSummary(j.files, j.youtube, date)));
+    const ok = results.filter((r) => r.id);
+    const failed = results.map((r, i) => (r.id ? null : `${jobs[i].label}: ${r.error ?? "요약 실패"}`)).filter(Boolean);
+    if (ok.length === 0) return setStatus({ text: failed.join(" / "), error: true });
+    if (failed.length) {
+      // 일부만 실패하면 실패 내역을 남기고 목록을 새로 고침
+      setStatus({ text: `${ok.length}장 완료, 실패: ${failed.join(" / ")}`, error: true });
+      return router.refresh();
+    }
+    router.push(ok.length === 1 ? `/reports/${ok[0].id}` : "/reports");
   }
 
   return (

@@ -14,7 +14,7 @@ export default async function ReportsPage() {
   return (
     <>
       <SetupNotice />
-      <Card title="리포트 PDF·유튜브 링크 올리기 (여러 개를 한 페이지로 묶어 요약)">
+      <Card title="리포트 PDF·유튜브 링크 올리기 (PDF는 파일마다 한 장, 유튜브는 모아서 한 장으로 요약)">
         <ReportUpload today={today} />
       </Card>
       <Card title="지난 요약">
