@@ -37,7 +37,7 @@ create table if not exists fundamentals (
 );
 
 create table if not exists macro_series (
-  series_id  text primary key,          -- 예: FRED:DGS10, ECOS:722Y001/D/0101000
+  series_id  text primary key,          -- 예: FRED:DGS10
   source     text not null,
   name       text not null,
   unit       text,

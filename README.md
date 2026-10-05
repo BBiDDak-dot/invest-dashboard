@@ -12,12 +12,11 @@ web/        Next.js 화면 (Vercel 배포)
 
 1. **API 키 발급** (모두 무료)
    - DART: https://opendart.fss.or.kr
-   - 한국은행 ECOS: https://ecos.bok.or.kr/api
    - FRED: https://fred.stlouisfed.org/docs/api/api_key.html
 2. **Supabase**: https://supabase.com 에서 프로젝트 생성 → SQL Editor에서 `supabase/schema.sql` 실행.
    설정 > API에서 Project URL과 `service_role` 키를 확인함.
 3. **GitHub Secrets** (저장소 Settings > Secrets and variables > Actions):
-   `SUPABASE_URL`, `SUPABASE_KEY`(service_role), `DART_API_KEY`, `ECOS_API_KEY`, `FRED_API_KEY`
+   `SUPABASE_URL`, `SUPABASE_KEY`(service_role), `DART_API_KEY`, `FRED_API_KEY`
 4. **첫 수집**: Actions 탭 > collect > Run workflow, days에 `1000` 입력.
 5. **Vercel 배포**: https://vercel.com 에서 이 저장소 import → Root Directory를 `web`으로 지정 →
    환경변수 `SUPABASE_URL`, `SUPABASE_KEY` 입력.
