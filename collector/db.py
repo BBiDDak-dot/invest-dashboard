@@ -38,3 +38,11 @@ def upsert(table: str, rows: list[dict]) -> None:
         )
         r.raise_for_status()
     print(f"{table}: {len(rows)}건 저장")
+
+
+def delete(table: str, query: str) -> None:
+    if not URL:
+        print(f"[dry-run] {table} 삭제: {query}")
+        return
+    r = requests.delete(f"{URL}/rest/v1/{table}?{query}", headers=_headers(), timeout=30)
+    r.raise_for_status()

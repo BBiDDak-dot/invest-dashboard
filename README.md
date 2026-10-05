@@ -20,7 +20,7 @@ web/        Next.js 화면 (Vercel 배포)
 4. **첫 수집**: Actions 탭 > collect > Run workflow, days에 `1000` 입력.
 5. **Vercel 배포**: https://vercel.com 에서 이 저장소 import → Root Directory를 `web`으로 지정 →
    환경변수 `SUPABASE_URL`, `SUPABASE_KEY` 입력.
-   본인만 보려면 Vercel 프로젝트 Settings > Deployment Protection을 켬.
+   무료 플랜에서는 사이트 주소를 아는 사람은 누구나 볼 수 있음(공개 시장 데이터만 표시함).
 
 ## 관심종목 추가
 
@@ -28,7 +28,8 @@ Supabase Table Editor에서 `watchlist`에 행 추가.
 - 국내: `ticker`=종목코드(예: 005930), `market`=KR, `corp_code`=DART 고유번호(공시 수집용)
 - 미국: `ticker`=심볼(예: AAPL), `market`=US
 
-경제지표 목록은 `collector/config.py`에서 수정함.
+경제지표 목록은 `collector/config.py`에서 수정함. 목록에서 뺀 지표는 다음 수집 때 DB에서도 지워짐.
+ISM 제조업 PMI는 FRED에 없어서 ISM의 PR Newswire 발표문 제목에서 읽어옴.
 
 ## 로컬 실행
 
