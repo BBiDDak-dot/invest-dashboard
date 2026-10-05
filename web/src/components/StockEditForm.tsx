@@ -14,7 +14,7 @@ export function StockEditForm({ item }: { item: WatchItem }) {
   return (
     <form action={action} className="space-y-3">
       <input type="hidden" name="ticker" value={item.ticker} />
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-4 lg:grid-cols-8">
         <label className={label}>
           구분
           <input name="group_name" defaultValue={item.group_name ?? ""} placeholder="예: 반도체" className={input} />
@@ -34,6 +34,14 @@ export function StockEditForm({ item }: { item: WatchItem }) {
         <label className={label}>
           12M Fwd P/E
           <input name="fwd_pe" inputMode="decimal" defaultValue={item.fwd_pe ?? ""} className={input} />
+        </label>
+        <label className={label}>
+          매입단가
+          <input name="avg_price" inputMode="decimal" defaultValue={item.avg_price ?? ""} className={input} />
+        </label>
+        <label className={label}>
+          보유주식수
+          <input name="quantity" inputMode="decimal" defaultValue={item.quantity ?? ""} className={input} />
         </label>
         <label className={label}>
           정렬 순서
