@@ -56,7 +56,7 @@ function MarketChart({ market, rows }: { market: string; rows: MarketFlow[] }) {
 
 export default async function FlowsPage({ searchParams }: PageProps<"/flows">) {
   const r = (await searchParams).range;
-  const range: Range = typeof r === "string" && r in RANGES ? (r as Range) : "3m";
+  const range: Range = typeof r === "string" && r in RANGES ? (r as Range) : "6m";
   const days = RANGES[range][1];
   const [kospi, kosdaq] = await Promise.all([getFlows("KOSPI", days), getFlows("KOSDAQ", days)]);
   return (
