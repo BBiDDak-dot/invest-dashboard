@@ -13,7 +13,7 @@ web/        Next.js 화면 (Vercel 배포)
 1. **API 키 발급** (모두 무료)
    - DART: https://opendart.fss.or.kr
    - FRED: https://fred.stlouisfed.org/docs/api/api_key.html
-2. **Supabase**: https://supabase.com 에서 프로젝트 생성 → SQL Editor에서 `supabase/schema.sql` 실행.
+2. **Supabase**: https://supabase.com 에서 프로젝트 생성 → SQL Editor에 `supabase/schema.sql` 파일 내용을 전부 복사해 붙여넣고 Run.
    설정 > API에서 Project URL과 `service_role` 키를 확인함.
 3. **GitHub Secrets** (저장소 Settings > Secrets and variables > Actions):
    `SUPABASE_URL`, `SUPABASE_KEY`(service_role), `DART_API_KEY`, `FRED_API_KEY`
