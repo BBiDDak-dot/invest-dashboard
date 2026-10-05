@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createReportSummary, prepareReportUpload } from "@/app/actions";
 
-const MAX_TOTAL_MB = 14; // Gemini 요청 한도(20MB)를 base64 변환 후에도 넘지 않도록
+const MAX_FILE_MB = 50; // 파일당 한도 (Supabase 저장소·Gemini 파일 업로드 기본 한도). 파일마다 따로 요약하므로 합계는 상관없음
 
 export function ReportUpload({ today }: { today: string }) {
   const router = useRouter();
@@ -18,8 +18,8 @@ export function ReportUpload({ today }: { today: string }) {
     e.preventDefault();
     const youtube = links.split(/\s+/).filter(Boolean);
     if (files.length === 0 && youtube.length === 0) return setStatus({ text: "PDF 파일이나 유튜브 링크를 넣을 것", error: true });
-    const totalMb = files.reduce((s, f) => s + f.size, 0) / 1024 / 1024;
-    if (totalMb > MAX_TOTAL_MB) return setStatus({ text: `한 번에 ${MAX_TOTAL_MB}MB까지 가능 (현재 ${totalMb.toFixed(1)}MB)`, error: true });
+    const big = files.find((f) => f.size > MAX_FILE_MB * 1024 * 1024);
+    if (big) return setStatus({ text: `파일 하나당 ${MAX_FILE_MB}MB까지 가능 (${big.name}: ${(big.size / 1024 / 1024).toFixed(1)}MB)`, error: true });
 
     let uploads: { path: string; url: string }[] = [];
     if (files.length > 0) {

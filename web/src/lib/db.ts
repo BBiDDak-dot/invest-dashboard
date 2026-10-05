@@ -64,6 +64,16 @@ export const storage = {
     const { url: signed } = (await res.json()) as { url: string };
     return `${url}/storage/v1${signed}`;
   },
+  // 비공개 파일을 잠시(기본 1시간) 열어볼 수 있는 주소
+  async signDownload(bucket: string, path: string, expiresIn = 3600): Promise<string> {
+    const res = await call(`/storage/v1/object/sign/${bucket}/${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expiresIn }),
+    });
+    const { signedURL } = (await res.json()) as { signedURL: string };
+    return `${url}/storage/v1${signedURL}`;
+  },
   async download(bucket: string, path: string): Promise<ArrayBuffer> {
     return (await call(`/storage/v1/object/${bucket}/${path}`)).arrayBuffer();
   },
@@ -176,6 +186,7 @@ export type Report = {
   created_at: string;
   report_date: string;
   file_names: string[];
+  file_paths?: string[] | null; // 원본 PDF 저장 경로 (007 SQL 이후)
   title: string | null;
   summary: string;
   model: string | null;

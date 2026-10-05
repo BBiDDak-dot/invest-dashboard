@@ -52,3 +52,4 @@ body {
 .report-md th, .report-md td { border: 1px solid var(--chart-grid); padding: 0.25rem 0.5rem; text-align: left; vertical-align: top; }
 .report-md th { font-weight: 600; }
 .report-md strong { font-weight: 600; }
+.report-md a { text-decoration: underline; text-underline-offset: 2px; color: var(--series-1); }
