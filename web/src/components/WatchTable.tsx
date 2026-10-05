@@ -3,7 +3,7 @@ import type { WatchRow } from "@/lib/queries";
 import { Empty } from "./Card";
 
 export function WatchTable({ rows }: { rows: WatchRow[] }) {
-  if (rows.length === 0) return <Empty>등록된 종목이 없음. Supabase의 watchlist 테이블에 종목을 추가하면 표시됨.</Empty>;
+  if (rows.length === 0) return <Empty>등록된 종목이 없음. 관심종목 화면에서 검색해 추가할 것.</Empty>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">

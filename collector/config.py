@@ -9,4 +9,6 @@ FRED_SERIES = [
     # AA: MSFT·GOOGL·AMZN·META 수준, BBB: ORCL 수준
     ("BAMLC0A2CAA", "AA등급 회사채 스프레드 (CDS 대용)", "%p"),
     ("BAMLC0A4CBBB", "BBB등급 회사채 스프레드 (CDS 대용)", "%p"),
+    # 관심종목 화면 상단 환율 표시용 (경제지표 화면에서는 숨김)
+    ("DEXKOUS", "원/달러 환율", "원"),
 ]

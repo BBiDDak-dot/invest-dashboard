@@ -13,3 +13,8 @@ export function changeColor(v: number | null | undefined) {
   if (!v) return "text-zinc-500";
   return v > 0 ? "text-red-600" : "text-blue-600";
 }
+
+// 오늘 날짜(한국 시간) YYYY-MM-DD
+export function kstToday() {
+  return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+}
