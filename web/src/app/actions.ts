@@ -117,6 +117,31 @@ export async function updateStock(_: ActionState, form: FormData): Promise<Actio
   });
 }
 
+// 표에서 칸 하나 직접 편집
+const NUM_FIELDS = ["target_price", "fwd_pe", "debt_ratio", "reserve_ratio", "avg_price", "quantity"] as const;
+const TEXT_FIELDS = ["group_name", "sector", "idea", "risk", "sell_signal"] as const;
+export type EditField = (typeof NUM_FIELDS)[number] | (typeof TEXT_FIELDS)[number];
+
+export async function updateField(ticker: string, field: EditField, value: string): Promise<ActionState> {
+  return run(async () => {
+    let v: number | string | null;
+    if ((NUM_FIELDS as readonly string[]).includes(field)) {
+      v = numOrNull(value);
+      if (v === null && value.replace(/,/g, "").trim() !== "") throw new Error("숫자로 입력할 것");
+    } else if ((TEXT_FIELDS as readonly string[]).includes(field)) v = textOrNull(value);
+    else throw new Error("편집할 수 없는 칸");
+    await update("watchlist", `ticker=eq.${encodeURIComponent(ticker)}`, { [field]: v });
+    revalidatePath("/", "layout");
+  });
+}
+
+export async function setStarred(ticker: string, starred: boolean): Promise<ActionState> {
+  return run(async () => {
+    await update("watchlist", `ticker=eq.${encodeURIComponent(ticker)}`, { starred });
+    revalidatePath("/", "layout");
+  });
+}
+
 // 포트폴리오: 매입단가·보유수량 저장 (수량 0이면 포트폴리오에서 빠짐)
 export async function saveHolding(_: ActionState, form: FormData): Promise<ActionState> {
   return run(async () => {

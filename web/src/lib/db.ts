@@ -86,6 +86,9 @@ export type WatchItem = {
   sort_order: number;
   avg_price?: number | null;
   quantity?: number | null;
+  starred?: boolean;
+  debt_ratio?: number | null; // 직접 입력 (없으면 재무제표로 계산)
+  reserve_ratio?: number | null;
 };
 
 export type Security = {
