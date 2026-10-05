@@ -11,7 +11,7 @@ import {
   type WatchItem,
 } from "./db";
 
-const FX_SERIES = "FRED:DEXKOUS"; // 원/달러 환율 (관심종목 화면 상단에도 표시)
+const FX_SERIES = "YF:KRW=X"; // 원/달러 환율 (관심종목 화면 상단에도 표시)
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10);
 
@@ -70,19 +70,19 @@ export async function getFinancials(tickers: string[]): Promise<Financial[]> {
 }
 
 export async function getFx(): Promise<MacroObservation | undefined> {
-  return (await select<MacroObservation>("macro_observations", `select=*&series_id=eq.${FX_SERIES}&order=date.desc&limit=1`))[0];
+  return (await select<MacroObservation>("macro_observations", `select=*&series_id=eq.${encodeURIComponent(FX_SERIES)}&order=date.desc&limit=1`))[0];
 }
 
 export type MacroRow = MacroSeries & { history: MacroObservation[] };
 
 // 화면 표시 순서 (없는 지표는 뒤로)
 const MACRO_ORDER = [
-  "FRED:DGS10",
-  "FRED:FEDFUNDS",
+  "YF:^TNX",
+  "FRED:DFEDTARU",
   "FRED:T10YIE",
   "FRED:CPILFESL",
   "ISM:MANUFACTURING_PMI",
-  "FRED:DCOILWTICO",
+  "YF:CL=F",
   FX_SERIES,
 ];
 
