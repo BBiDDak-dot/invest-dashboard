@@ -10,6 +10,7 @@ const links = [
   { href: "/flows", label: "수급" },
   { href: "/news", label: "뉴스" },
   { href: "/disclosures", label: "공시" },
+  { href: "/earnings", label: "실적 스크리닝" },
   { href: "/reports", label: "리포트" },
 ];
 
