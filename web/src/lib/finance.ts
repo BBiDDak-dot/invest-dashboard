@@ -19,7 +19,41 @@ export function ttm(fin: Financial[]): TtmPoint[] {
   return out;
 }
 
-// 표시 단위: 원화는 억원, 달러는 백만달러
+// 표시 단위: 원화는 억원, 달러는 백만달러, 위안화는 억위안 (GRT 등 외국 기업은 자국 통화로 공시)
 export function moneyUnit(currency: string | null | undefined) {
-  return currency === "USD" ? { div: 1e6, label: "백만달러" } : { div: 1e8, label: "억원" };
+  if (currency === "USD") return { div: 1e6, label: "백만달러" };
+  if (currency === "CNY") return { div: 1e8, label: "억위안" };
+  if (!currency || currency === "KRW") return { div: 1e8, label: "억원" };
+  return { div: 1e6, label: `백만 ${currency}` };
+}
+
+export type QuarterRow = {
+  period: string;
+  revenue: number | null;
+  operatingIncome: number | null;
+  margin: number | null; // 영업이익률 %
+  revenueYoy: number | null; // 매출 전년 동기 대비 %
+  opYoy: number | null;
+};
+
+// 분기별 표: 최근 분기부터, 전년 동기(12개월 전) 대비 증감률 포함
+export function quarterRows(fin: Financial[], limit = 8): QuarterRow[] {
+  const q = [...fin].filter((f) => f.revenue != null || f.operating_income != null).sort((a, b) => a.period_end.localeCompare(b.period_end));
+  const byMonth = new Map(q.map((f) => [monthIndex(f.period_end), f]));
+  const yoy = (now: number | null, prev: number | null | undefined) =>
+    now != null && prev != null && prev > 0 ? (now / prev - 1) * 100 : null;
+  return q
+    .map((f) => {
+      const prev = byMonth.get(monthIndex(f.period_end) - 12);
+      return {
+        period: f.period_end.slice(0, 7),
+        revenue: f.revenue,
+        operatingIncome: f.operating_income,
+        margin: f.revenue && f.operating_income != null ? (f.operating_income / f.revenue) * 100 : null,
+        revenueYoy: yoy(f.revenue, prev?.revenue),
+        opYoy: yoy(f.operating_income, prev?.operating_income),
+      };
+    })
+    .reverse()
+    .slice(0, limit);
 }
