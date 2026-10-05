@@ -13,6 +13,7 @@ import financials
 import flows
 import stock_flows
 import macro
+import news_clips
 import prices
 
 # DB 미연결(dry run) 시 사용할 예시 종목
@@ -42,6 +43,7 @@ def main() -> None:
         ("재무", lambda: financials.collect(watchlist)),
         ("수급", lambda: flows.collect(start)),
         ("종목 수급", stock_flows.collect),
+        ("산업 클리핑", news_clips.collect),
         ("PDF 정리", cleanup.collect),
     ]:
         try:

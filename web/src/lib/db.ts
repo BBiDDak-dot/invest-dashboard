@@ -148,6 +148,24 @@ export type NewsNote = {
   updated_at: string;
 };
 
+// 산업 클리핑 기사 (수집기가 선별·분류)
+export type NewsClip = {
+  id: string;
+  url: string;
+  title: string;
+  title_ko: string | null;
+  summary: string | null;
+  source: string | null;
+  region: string | null;
+  published_at: string | null;
+  collected_at: string;
+  category: string | null;
+  industry: string | null;
+  score: number | null;
+  what: string | null;
+  companies: string[] | null;
+};
+
 // 전체 상장사 중 투자 시그널 공시 (전자공시 탭)
 export type SignalDisclosure = {
   id: string;

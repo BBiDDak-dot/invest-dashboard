@@ -8,6 +8,7 @@ import {
   type MacroObservation,
   type MacroSeries,
   type MarketFlow,
+  type NewsClip,
   type NewsNote,
   type Price,
   type Report,
@@ -136,6 +137,14 @@ export async function getDisclosuresSince(days: number): Promise<Disclosure[]> {
 export async function getSignalDisclosures(days: number, category?: string): Promise<SignalDisclosure[]> {
   const cat = category ? `&category=eq.${encodeURIComponent(category)}` : "";
   return selectAll<SignalDisclosure>("signal_disclosures", `select=*&date=gte.${daysAgo(days)}${cat}&order=date.desc,id.desc`);
+}
+
+// 산업 클리핑: 선별된 기사만, 최근 n일
+export async function getNewsClips(days: number): Promise<NewsClip[]> {
+  return select<NewsClip>(
+    "news_clips",
+    `select=id,url,title,title_ko,summary,source,region,published_at,collected_at,category,industry,score,what,companies&selected=is.true&collected_at=gte.${daysAgo(days)}&order=published_at.desc.nullslast&limit=1000`,
+  );
 }
 
 export async function getNewsNotes(): Promise<NewsNote[]> {
