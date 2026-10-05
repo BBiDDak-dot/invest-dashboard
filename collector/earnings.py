@@ -11,6 +11,7 @@ import html
 import io
 import os
 import re
+import time
 import zipfile
 from collections import defaultdict
 
@@ -20,6 +21,9 @@ import db
 
 DART = "https://opendart.fss.or.kr/api"
 KEEP_DAYS = 400
+# DART 다중회사 조회가 느려지는 날이 있어(요청당 1분 넘게) 정기보고서 조회에 쓸 시간을 제한함.
+# 못 읽은 보고서는 저장하지 않으므로 다음 수집 때 다시 읽음
+PERIODIC_BUDGET_SEC = 15 * 60
 REVENUE_NAMES = {"매출액", "수익(매출액)", "영업수익", "매출", "매출액(수익)"}
 OP_NAMES = {"영업이익", "영업이익(손실)", "영업손실"}
 # 정기보고서 제목 → 보고서 코드. 12월 결산 회사만 (다른 결산월은 분기가 어긋나 건너뜀)
@@ -100,14 +104,16 @@ def _amount(s) -> float | None:
         return None
 
 
-def _multi(key: str, corp_codes: list[str], year: int, reprt_code: str) -> dict[str, dict]:
-    """여러 회사 주요계정 → {corp_code: {"revenue": {...}, "op": {...}}}. 연결 우선, 없으면 별도."""
+def _multi(key: str, corp_codes: list[str], year: int, reprt_code: str, deadline: float) -> dict[str, dict]:
+    """여러 회사 주요계정 → {corp_code: {"revenue": {...}, "op": {...}}}. 연결 우선, 없으면 별도. 시간이 다 되면 거기까지만."""
     out: dict[str, dict] = {}
     for i in range(0, len(corp_codes), 100):
+        if time.time() > deadline:
+            break
         r = requests.get(
             f"{DART}/fnlttMultiAcnt.json",
             params={"crtfc_key": key, "corp_code": ",".join(corp_codes[i : i + 100]), "bsns_year": str(year), "reprt_code": reprt_code},
-            timeout=120,
+            timeout=(10, 120),
         ).json()
         by_fs: dict[str, dict[str, dict]] = defaultdict(lambda: defaultdict(dict))
         for it in r.get("list", []):
@@ -152,9 +158,10 @@ def periodic(key: str, start: dt.date, done: set[str], end: dt.date | None = Non
     groups: dict[tuple[int, str], list[str]] = defaultdict(list)
     for d, _, year, code in filings:
         groups[(year, code)].append(d["corp_code"])
-    values = {g: _multi(key, codes, *g) for g, codes in groups.items()}
+    deadline = time.time() + PERIODIC_BUDGET_SEC
+    values = {g: _multi(key, codes, *g, deadline) for g, codes in groups.items()}
     # 4분기 = 연간 - 3분기 누적 (3분기보고서의 누적 금액)
-    cum3 = {year: _multi(key, codes, year, "11014") for (year, code), codes in groups.items() if code == "11011"}
+    cum3 = {year: _multi(key, codes, year, "11014", deadline) for (year, code), codes in groups.items() if code == "11011"}
 
     rows = []
     for d, cls, year, code in filings:
@@ -193,7 +200,8 @@ def periodic(key: str, start: dt.date, done: set[str], end: dt.date | None = Non
             "period": f"{year}.{q}Q",
             **row,
         })
-    print(f"정기보고서: {len(filings)}건 중 {len(rows)}건 수치 읽음")
+    late = " (시간 제한으로 일부는 다음 수집 때)" if time.time() > deadline else ""
+    print(f"정기보고서: {len(filings)}건 중 {len(rows)}건 수치 읽음{late}")
     return rows
 
 
@@ -234,7 +242,8 @@ def collect(start: dt.date) -> None:
                     **v,
                 })
         day += dt.timedelta(days=1)
-    rows += periodic(key, start, done)
+    # 잠정실적을 먼저 저장해 두고 정기보고서를 읽음 (정기보고서 조회가 실패해도 잠정실적은 남게)
     db.upsert("earnings_screen", rows)
-    print(f"실적 스크리닝: {len(rows)}건 저장, 표를 못 읽은 공시 {skipped}건")
+    print(f"실적 스크리닝: 잠정실적 {len(rows)}건 저장, 표를 못 읽은 공시 {skipped}건")
+    db.upsert("earnings_screen", periodic(key, start, done))
     db.delete("earnings_screen", f"date=lt.{(dt.date.today() - dt.timedelta(days=KEEP_DAYS)).isoformat()}")
