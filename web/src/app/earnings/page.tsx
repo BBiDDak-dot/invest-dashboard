@@ -6,12 +6,30 @@ import type { EarningsRow } from "@/lib/db";
 import { changeColor, num } from "@/lib/format";
 import { daysAgo, getEarnings, getWatchItems } from "@/lib/queries";
 
-const DAYS = { "7": "1주", "30": "1개월", "90": "3개월" } as const;
 const VIEWS = { grow: "동반 성장", all: "전체", memo: "메모" } as const;
 const MINS = { "0": "0%↑", "10": "10%↑", "30": "30%↑" } as const;
 const SORTS = { date: "최신순", op: "영업이익 YoY순" } as const;
-type Params = { days: keyof typeof DAYS; view: keyof typeof VIEWS; min: keyof typeof MINS; sort: keyof typeof SORTS };
-const DEFAULTS: Params = { days: "30", view: "grow", min: "0", sort: "date" };
+type Params = { q: string; view: keyof typeof VIEWS; min: keyof typeof MINS; sort: keyof typeof SORTS };
+const DEFAULTS: Params = { q: "", view: "grow", min: "0", sort: "date" };
+
+// 통상의 실적 발표 기간: 1Q는 4월~5/15, 2Q는 7월~8/14, 3Q는 10월~11/14(분기·반기보고서 마감), 4Q는 1월~3/31(사업보고서 마감)
+const SEASON = { 1: "4/1~5/15", 2: "7/1~8/14", 3: "10/1~11/14", 4: "1/1~3/31" } as const;
+
+// 오늘 기준 발표가 시작된 가장 최근 분기부터 n개 (예: 10/6이면 26.3Q, 26.2Q, 26.1Q …)
+function recentQuarters(today: string, n: number) {
+  const y = Number(today.slice(0, 4));
+  const m = Number(today.slice(5, 7));
+  let [yy, qq] = m <= 3 ? [y - 1, 4] : [y, Math.floor((m - 1) / 3)];
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) {
+    out.push(`${yy}.${qq}Q`);
+    [yy, qq] = qq === 1 ? [yy - 1, 4] : [yy, qq - 1];
+  }
+  return out;
+}
+
+const qLabel = (q: string) => `'${q.slice(2, 4)}.${q.slice(5)}`;
+const qSeason = (q: string) => SEASON[Number(q.slice(5, 6)) as 1 | 2 | 3 | 4];
 
 const chip = (on: boolean) =>
   `rounded-md px-2.5 py-1 ${on ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"}`;
@@ -95,16 +113,21 @@ function Item({ r, watch }: { r: EarningsRow; watch: Set<string> }) {
 export default async function EarningsPage({ searchParams }: PageProps<"/earnings">) {
   const sp = await searchParams;
   const p = { ...DEFAULTS };
-  for (const [k, opts] of [["days", DAYS], ["view", VIEWS], ["min", MINS], ["sort", SORTS]] as const) {
+  for (const [k, opts] of [["view", VIEWS], ["min", MINS], ["sort", SORTS]] as const) {
     const v = sp[k];
     if (typeof v === "string" && v in opts) (p as Record<string, string>)[k] = v;
   }
-  const href = (patch: Partial<Params>) => `/earnings?${new URLSearchParams({ ...p, ...patch })}`;
-  // 기간 앞쪽에 먼저 나온 잠정실적이 있으면 그게 최초 공시라서, 넉 달 더 앞까지 읽어 최초 공시를 고른 뒤 기간으로 거름
-  const [all, watchItems] = await Promise.all([getEarnings(Number(p.days) + 120), getWatchItems()]);
+  const quarters = recentQuarters(daysAgo(0), 5);
+  // 다섯 분기 전 실적 발표가 시작된 시점부터 읽으면 됨 (정정 공시가 늦게 나와도 최초 공시만 쓰므로 충분)
+  const [all, watchItems] = await Promise.all([getEarnings(5 * 92 + 31), getWatchItems()]);
   const watch = new Set(watchItems.filter((w) => w.market === "KR").map((w) => w.ticker));
-  const cutoff = daysAgo(Number(p.days));
-  const rows = firstDisclosures(all).filter((r) => r.date >= cutoff);
+  const firsts = firstDisclosures(all);
+  const count = new Map<string, number>();
+  for (const r of firsts) if (r.period) count.set(r.period, (count.get(r.period) ?? 0) + 1);
+  // 기본은 공시가 있는 가장 최근 분기 (발표 시즌 초반엔 바로 앞 분기가 아니라 막 시작한 분기)
+  p.q = typeof sp.q === "string" && quarters.includes(sp.q) ? sp.q : (quarters.find((q) => count.get(q)) ?? quarters[0]);
+  const href = (patch: Partial<Params>) => `/earnings?${new URLSearchParams({ ...p, ...patch })}`;
+  const rows = firsts.filter((r) => r.period === p.q);
   let shown = p.view === "grow" ? rows.filter((r) => grows(r, p)) : p.view === "memo" ? rows.filter((r) => r.note) : rows;
   if (p.sort === "op") shown = [...shown].sort((a, b) => (b.op_yoy ?? -Infinity) - (a.op_yoy ?? -Infinity));
   const group = (label: string, opts: Record<string, string>, key: keyof Params) => (
@@ -125,12 +148,19 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
       <Card title="분기 실적 최초 공시 (코스피·코스닥)">
         <div className="mb-3 space-y-2">
           {group("보기", VIEWS, "view")}
-          {group("기간", DAYS, "days")}
+          <div className="flex flex-wrap items-center gap-1 text-sm">
+            <span className="mr-1 text-xs text-zinc-400">분기</span>
+            {quarters.map((q) => (
+              <Link key={q} href={href({ q })} scroll={false} className={chip(p.q === q)}>
+                {qLabel(q)} <span className="text-[11px] opacity-60">{count.get(q) ?? 0}</span>
+              </Link>
+            ))}
+          </div>
           {p.view === "grow" && group("최소 증가율", MINS, "min")}
           {group("정렬", SORTS, "sort")}
         </div>
         <p className="mb-2 text-xs text-zinc-500">
-          {shown.length}개 기업 (기간 내 실적 공시 {rows.length}개 기업 중)
+          {qLabel(p.q)} 실적 (통상 {qSeason(p.q)} 발표) · {shown.length}개 기업 (실적 공시 {rows.length}개 기업 중)
           {p.view === "grow" && ` · 분기 매출액과 영업이익이 모두 전년 동기 대비 ${p.min}% 넘게 늘었거나 영업이익이 흑자전환한 곳`}
         </p>
         {shown.length === 0 ? (
