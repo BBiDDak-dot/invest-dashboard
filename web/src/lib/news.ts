@@ -134,3 +134,115 @@ export async function getArticle(id: string): Promise<Article | null> {
     blocks,
   };
 }
+
+// ---------- 일반 언론사 기사 (산업 클리핑) ----------
+// 사이트마다 구조가 달라서, 본문일 가능성이 큰 영역을 찾은 뒤 문단(<p>)과 사진만 뽑음
+
+export const isClipId = (id: string) => /^[0-9a-f]{20}$/.test(id);
+
+const BODY_HINT =
+  /<(article|div|section)[^>]+(?:itemprop="articleBody"|(?:class|id)="[^"]*(?:article[-_]?body|articleBody|article[-_]?content|article[-_]?view|article[-_]?txt|news[-_]?body|news[-_]?content|art[-_]?body|entry[-_]?content|post[-_]?content|story[-_]?body|view[-_]?cont|cont[-_]?body|article_txt|body[-_]?text)[^"]*")[^>]*>/i;
+
+// 여는 태그 위치부터 짝이 맞는 닫는 태그까지 잘라냄
+function element(html: string, start: number, tag: string) {
+  const re = new RegExp(`<(/?)${tag}\\b[^>]*>`, "gi");
+  re.lastIndex = start;
+  let depth = 0;
+  for (let m; (m = re.exec(html)); ) {
+    depth += m[1] ? -1 : 1;
+    if (depth === 0) return html.slice(start, m.index);
+  }
+  return html.slice(start);
+}
+
+const absolute = (src: string, base: string) => {
+  try {
+    return new URL(decode(src), base).href;
+  } catch {
+    return null;
+  }
+};
+
+function blocksOf(region: string, base: string): ArticleBlock[] {
+  const out: ArticleBlock[] = [];
+  const re = /<p\b[^>]*>([\s\S]*?)<\/p>|<img\b([^>]*)>|<figcaption\b[^>]*>([\s\S]*?)<\/figcaption>/gi;
+  for (let m; (m = re.exec(region)); ) {
+    if (m[2] !== undefined) {
+      const src = m[2].match(/(?:data-src|data-original|src)="([^"]+)"/)?.[1];
+      const abs = src && !src.startsWith("data:") && !/logo|icon|banner|blank|pixel|\.gif/i.test(src) ? absolute(src, base) : null;
+      if (abs) out.push({ kind: "img", src: abs });
+    } else if (m[3] !== undefined) {
+      const t = strip(m[3]).trim();
+      if (t) out.push({ kind: "caption", text: t });
+    } else {
+      for (const line of strip(m[1].replace(/<br\s*\/?>/gi, "\n")).split("\n")) {
+        const t = line.trim();
+        if (t) out.push({ kind: "text", text: t });
+      }
+    }
+  }
+  // <p> 없이 <br>로만 문단을 나누는 사이트(한국경제 등)는 줄 단위로 다시 뽑음
+  if (textLen(out) < 300) {
+    const flat = region
+      .replace(/<img\b[^>]*>/gi, "")
+      .replace(/<figcaption\b[\s\S]*?<\/figcaption>/gi, "")
+      .replace(/<br\s*\/?>|<\/(p|div|li|h\d)>/gi, "\n");
+    const lines = strip(flat).split("\n").map((t) => t.trim()).filter(Boolean);
+    const alt: ArticleBlock[] = [...out.filter((b) => b.kind === "img"), ...lines.map((text) => ({ kind: "text" as const, text }))];
+    if (textLen(alt) > textLen(out)) return alt;
+  }
+  return out;
+}
+
+const textLen = (b: ArticleBlock[]) => b.reduce((n, x) => n + (x.kind === "text" ? x.text.length : 0), 0);
+
+// 일부 언론사는 브라우저가 아닌 요청을 막아서 브라우저처럼 보냄
+const BROWSER = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+};
+const JUNK = /^(ⓒ|©|Copyright|무단\s?전재|ADVERTISEMENT$|광고$|FTC: We use|Your personalized solar quotes|Charge your electric vehicle at home|If you’re considering going solar)/i;
+const HANGUL = /[가-힣]/;
+
+// 국내 기사 뒤에 붙는 번역본(영문·불어 등)은 잘라냄: 한글 기사인데 한글 없는 긴 문단이 나오면 거기까지
+function trimTranslations(blocks: ArticleBlock[]) {
+  const texts = blocks.filter((b) => b.kind === "text") as { text: string }[];
+  if (!texts[0] || !HANGUL.test(texts.slice(0, 3).map((t) => t.text).join(""))) return blocks;
+  const cut = blocks.findIndex((b) => b.kind === "text" && b.text.length >= 60 && !HANGUL.test(b.text));
+  return cut > 0 ? blocks.slice(0, cut) : blocks;
+}
+
+export async function getPageArticle(url: string): Promise<Omit<Article, "item"> | null> {
+  const r = await fetch(url, { headers: BROWSER, next: { revalidate: 86400 } });
+  if (!r.ok) throw new Error(`${r.status}`);
+  const buf = await r.arrayBuffer();
+  // 일부 국내 사이트는 EUC-KR
+  let html = new TextDecoder("utf-8").decode(buf);
+  const charset = (r.headers.get("content-type") ?? "").match(/charset=([\w-]+)/i)?.[1] ?? html.slice(0, 3000).match(/charset="?([\w-]+)/i)?.[1];
+  if (charset && !/utf-?8/i.test(charset)) {
+    try {
+      html = new TextDecoder(charset).decode(buf);
+    } catch {}
+  }
+  html = html.replace(/<(script|style|noscript|nav|header|footer|aside|form|button|iframe)\b[\s\S]*?<\/\1>/gi, "").replace(/<!--[\s\S]*?-->/g, "");
+
+  const candidates: string[] = [];
+  // itemprop="articleBody"가 가장 정확해서 먼저 봄 (감싸는 큰 영역보다 우선)
+  const prop = html.match(/<(article|div|section)[^>]+itemprop="articleBody"[^>]*>/i);
+  if (prop?.index !== undefined) candidates.push(element(html, prop.index, prop[1]));
+  const hint = html.match(BODY_HINT);
+  if (hint?.index !== undefined) candidates.push(element(html, hint.index, hint[1]));
+  const art = html.search(/<article\b/i);
+  if (art >= 0) candidates.push(element(html, art, "article"));
+  candidates.push(html.match(/<body\b[\s\S]*$/i)?.[0] ?? html);
+
+  for (const c of candidates) {
+    let blocks = blocksOf(c, url);
+    // 본문 밖 짧은 문단(메뉴, 저작권 안내 등) 정리: 전체 페이지에서 뽑을 땐 짧은 줄을 버림
+    if (c === candidates[candidates.length - 1]) blocks = blocks.filter((b) => b.kind !== "text" || b.text.length >= 40);
+    blocks = trimTranslations(blocks.filter((b) => b.kind !== "text" || !JUNK.test(b.text)));
+    if (textLen(blocks) >= 300) return { lead: null, blocks };
+  }
+  return null;
+}

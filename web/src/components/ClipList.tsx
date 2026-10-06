@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { NewsClip } from "@/lib/db";
 import { newsTime, type NewsItem } from "@/lib/news";
 import { Empty } from "./Card";
@@ -36,11 +37,11 @@ export function ClipList({ clips, notes, empty }: { clips: NewsClip[]; notes?: M
               {c.region === "해외" && <span className={`${badge} border border-zinc-200 text-zinc-500 dark:border-zinc-700`}>해외</span>}
               {c.score === 3 && <span className={`${badge} text-amber-600`}>구체적 사례</span>}
             </div>
-            <a href={c.url} target="_blank" rel="noreferrer" className="group block">
+            <Link href={`/news/c/${c.id}`} className="group block">
               <div className="font-medium leading-snug group-hover:underline">{item.title}</div>
               {c.title_ko && c.title_ko !== c.title && <div className="text-xs text-zinc-400">{c.title}</div>}
               {c.what && <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">→ {c.what}</p>}
-            </a>
+            </Link>
             <div className="mt-1 text-xs text-zinc-400">
               {c.source} · {newsTime(item.time)}
               {c.companies && c.companies.length > 0 && ` · ${c.companies.join(", ")}`}

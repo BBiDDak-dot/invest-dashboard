@@ -1,13 +1,14 @@
 import Link from "next/link";
-import { isArticleId, newsTime, type NewsItem } from "@/lib/news";
+import { isArticleId, isClipId, newsTime, type NewsItem } from "@/lib/news";
 import { Empty } from "./Card";
 import { NewsNote } from "./NewsNote";
 
-// 네이버 기사는 사이트 안 전문 화면으로, 그 밖은 원문 새 창으로
+// 네이버·산업 클리핑 기사는 사이트 안 전문 화면으로, 그 밖은 원문 새 창으로
 function ItemLink({ n, children }: { n: NewsItem; children: React.ReactNode }) {
   const cls = "group flex gap-3";
-  return isArticleId(n.id) ? (
-    <Link href={`/news/a/${n.id}`} className={cls}>
+  const inner = isArticleId(n.id) ? `/news/a/${n.id}` : isClipId(n.id) ? `/news/c/${n.id}` : null;
+  return inner ? (
+    <Link href={inner} className={cls}>
       {children}
     </Link>
   ) : (
