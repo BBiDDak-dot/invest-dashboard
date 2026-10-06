@@ -224,3 +224,8 @@ export async function getPortfolio(): Promise<Portfolio> {
     .sort((a, b) => (b.evalKrw ?? 0) - (a.evalKrw ?? 0));
   return { rows, holdings, cash, fx, total };
 }
+
+export async function getNewsClip(id: string): Promise<NewsClip | null> {
+  const [row] = await select<NewsClip>("news_clips", `select=*&id=eq.${encodeURIComponent(id)}`);
+  return row ?? null;
+}
