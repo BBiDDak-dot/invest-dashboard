@@ -15,11 +15,21 @@ const SORTS = { date: "최신순", op: "영업이익 YoY순", rev: "매출 규�
 type Params = { q: string; view: keyof typeof VIEWS; min: keyof typeof MINS; size: keyof typeof SIZES; sort: keyof typeof SORTS };
 const DEFAULTS: Params = { q: "", view: "grow", min: "0", size: "100", sort: "date" };
 
-const turned = (r: UsEarningsRow) => (r.op_turn ?? "").includes("흑자");
+// 항목별 판정: 전년 동기 대비 증가(흑자전환 포함) / 판단 불가(값이 없음) / 미달
+function judge(now: number | null, prev: number | null, yoy: number | null, turn: string | null, min: number) {
+  if (now == null || prev == null) return "none";
+  return (yoy != null && yoy > min) || (turn ?? "").includes("흑자") ? "up" : "fail";
+}
 
+// 매출·영업이익·당기순이익이 모두 늘어난 곳. 없는 항목이 있으면 나머지 둘만으로 판단 (두 항목 이상 필요)
 function grows(r: UsEarningsRow, p: Params) {
   const min = Number(p.min);
-  return r.revenue_yoy != null && r.revenue_yoy > min && ((r.op_yoy != null && r.op_yoy > min) || turned(r));
+  const j = [
+    judge(r.revenue, r.revenue_prev_y, r.revenue_yoy, null, min),
+    judge(r.op, r.op_prev_y, r.op_yoy, r.op_turn, min),
+    judge(r.ni, r.ni_prev_y, r.ni_yoy, r.ni_turn, min),
+  ];
+  return !j.includes("fail") && j.filter((x) => x === "up").length >= 2;
 }
 
 // 백만 달러 → 억 달러
@@ -46,7 +56,7 @@ function Item({ r, watch }: { r: UsEarningsRow; watch: Set<string> }) {
           </a>
         )}
       </div>
-      <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm tabular-nums sm:grid-cols-3">
+      <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm tabular-nums sm:grid-cols-4">
         <div>
           <span className="text-xs text-zinc-500">매출액 </span>
           {usd(r.revenue)} <Pct v={r.revenue_yoy} />
@@ -56,6 +66,11 @@ function Item({ r, watch }: { r: UsEarningsRow; watch: Set<string> }) {
           <span className="text-xs text-zinc-500">영업이익 </span>
           {usd(r.op)} <Pct v={r.op_yoy} turn={r.op_turn} />
           <div className="text-[11px] text-zinc-400">전년 동기 {usd(r.op_prev_y)}</div>
+        </div>
+        <div>
+          <span className="text-xs text-zinc-500">순이익 </span>
+          {usd(r.ni)} <Pct v={r.ni_yoy} turn={r.ni_turn} />
+          <div className="text-[11px] text-zinc-400">전년 동기 {usd(r.ni_prev_y)}</div>
         </div>
         <div>
           <span className="text-xs text-zinc-500">영업이익률 </span>
@@ -117,7 +132,7 @@ export default async function UsEarningsPage({ searchParams }: PageProps<"/earni
         </div>
         <p className="mb-2 text-xs text-zinc-500">
           {qLabel(p.q)} 실적 (통상 {qSeason(p.q, true)} 제출) · {shown.length}개 기업 (실적 {rows.length}개 기업 중)
-          {p.view === "grow" && ` · 분기 매출액과 영업이익이 모두 전년 동기 대비 ${p.min}% 넘게 늘었거나 영업이익이 흑자전환한 곳`}
+          {p.view === "grow" && ` · 분기 매출액·영업이익·당기순이익이 모두 전년 동기 대비 ${p.min}% 넘게 늘어난 곳(이익은 흑자전환 포함, 없는 항목은 빼고 나머지 둘로 판단)`}
         </p>
         {shown.length === 0 ? (
           <Empty>{all.length === 0 ? "아직 수집된 실적이 없음. 수집기가 평일마다 SEC 데이터를 읽어 옴." : "조건에 맞는 기업이 없음."}</Empty>

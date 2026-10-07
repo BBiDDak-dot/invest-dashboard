@@ -260,6 +260,10 @@ export type UsEarningsRow = {
   op_prev_y: number | null;
   op_yoy: number | null;
   op_turn: string | null;
+  ni: number | null;
+  ni_prev_y: number | null;
+  ni_yoy: number | null;
+  ni_turn: string | null;
   note: string | null;
 };
 

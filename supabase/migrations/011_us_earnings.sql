@@ -1,4 +1,4 @@
--- 미국 실적 스크리닝: SEC XBRL의 분기 매출·영업이익(백만 달러). Supabase SQL Editor에 붙여넣고 한 번 실행함.
+-- 미국 실적 스크리닝: SEC XBRL의 분기 매출·영업이익·당기순이익(백만 달러). Supabase SQL Editor에 붙여넣고 한 번 실행함.
 create table if not exists us_earnings (
   id              text primary key,   -- CIK-분기 (예: 320193-2026.2Q)
   cik             bigint not null,
@@ -13,6 +13,7 @@ create table if not exists us_earnings (
   derived_q4      boolean,            -- 연간 - 세 분기로 계산한 값
   revenue         numeric, revenue_prev_y numeric, revenue_yoy numeric,
   op              numeric, op_prev_y numeric, op_yoy numeric, op_turn text,
+  ni              numeric, ni_prev_y numeric, ni_yoy numeric, ni_turn text,   -- 당기순이익 (NetIncomeLoss)
   note            text,               -- 내 메모 (수집기는 건드리지 않음)
   note_updated_at timestamptz
 );

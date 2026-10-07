@@ -1,4 +1,4 @@
-"""미국 상장사 실적 스크리닝: SEC XBRL frames API로 분기 매출·영업이익(백만 달러)과 전년 동기 대비 증감률을 저장함.
+"""미국 상장사 실적 스크리닝: SEC XBRL frames API로 분기 매출·영업이익·당기순이익(백만 달러)과 전년 동기 대비 증감률을 저장함.
 
 frames API는 한 개념·한 기간에 대해 모든 제출 회사의 값을 한 번에 돌려줌(달력 분기에 가장 가까운 회계 분기로 맞춰 줌).
 4분기는 10-K에 연간만 나오는 경우가 많아 연간 - 나머지 세 분기로 계산함.
@@ -22,6 +22,7 @@ REVENUE = [
     "RevenueFromContractWithCustomerIncludingAssessedTax",
 ]
 OP = "OperatingIncomeLoss"
+NI = "NetIncomeLoss"
 SHOWN = 5  # 화면에 보이는 분기 수 (웹 실적 스크리닝과 같음)
 MIN_REVENUE = 10  # 분기 매출 1천만 달러 미만 초소형사는 저장하지 않음
 
@@ -135,7 +136,8 @@ def collect() -> None:
 
     revenue = {c: _frames(c, quarters, years) for c in REVENUE}
     op = _frames(OP, quarters, years)
-    print(f"[미국 실적] frames 읽음: 매출 {sum(len(v) for v in revenue.values())}개사(개념 합), 영업이익 {len(op)}개사")
+    ni = _frames(NI, quarters, years)
+    print(f"[미국 실적] frames 읽음: 매출 {sum(len(v) for v in revenue.values())}개사(개념 합), 영업이익 {len(op)}개사, 순이익 {len(ni)}개사")
 
     rows = []
     for cik, (ticker, name) in tickers.items():
@@ -151,6 +153,8 @@ def collect() -> None:
                 continue
             prev = revenue[c][cik].get(p)
             oc, op_ = o.get(q), o.get(p)
+            n = ni.get(cik, {})
+            nc, np_ = n.get(q), n.get(p)
             row = {
                 "id": f"{cik}-{q}",
                 "cik": cik,
@@ -164,9 +168,12 @@ def collect() -> None:
                 "revenue_prev_y": round(prev["val"] / 1e6, 1) if prev else None,
                 "op": round(oc["val"] / 1e6, 1) if oc else None,
                 "op_prev_y": round(op_["val"] / 1e6, 1) if op_ else None,
+                "ni": round(nc["val"] / 1e6, 1) if nc else None,
+                "ni_prev_y": round(np_["val"] / 1e6, 1) if np_ else None,
             }
             row["revenue_yoy"], _ = _growth(row["revenue"], row["revenue_prev_y"])
             row["op_yoy"], row["op_turn"] = _growth(row["op"], row["op_prev_y"])
+            row["ni_yoy"], row["ni_turn"] = _growth(row["ni"], row["ni_prev_y"])
             rows.append(row)
 
     # 제출일은 처음 저장한 값을 유지 (frames의 접수번호는 나중에 낸 보고서로 바뀌기도 함)
