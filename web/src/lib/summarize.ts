@@ -1,5 +1,5 @@
 import "server-only";
-import { ApiError, createPartFromUri, FileState, GoogleGenAI, type Part } from "@google/genai";
+import { ApiError, createPartFromUri, FileState, GoogleGenAI, MediaResolution, type Part } from "@google/genai";
 import type { WatchItem } from "./db";
 
 // 무료 한도가 넉넉한 Gemini API(Google AI Studio 키) 사용. Pro가 한도 초과·과부하면 Flash → Flash-Lite 순으로 다시 시도함.
@@ -50,7 +50,8 @@ function watchContext(items: WatchItem[]) {
     .join("\n");
 }
 
-export type Source = { name: string; pdf?: ArrayBuffer; youtube?: string };
+// notes: 영상을 미리 따로 읽어 둔 메모(유튜브는 영상마다 summarizeVideo로 먼저 읽고, 마지막에 메모들을 한 장으로 합침)
+export type Source = { name: string; pdf?: ArrayBuffer; youtube?: string; notes?: string };
 
 // Gemini는 youtube.com/watch?v=ID 형태만 영상으로 알아봄. &t=6s 같은 꼬리나 youtu.be·shorts 주소는 웹페이지로 보고 400을 냄
 export function canonicalYoutube(url: string) {
@@ -64,6 +65,7 @@ export async function summarizeReports(sources: Source[], watch: WatchItem[]) {
   // 작은 PDF는 요청에 바로 담고, 큰 PDF(요청 한도 20MB를 base64로 넘기는 것)는 Gemini 파일 저장소에 올려서 참조함 (최대 50MB)
   const parts: Part[] = await Promise.all(
     sources.map(async (s): Promise<Part> => {
+      if (s.notes) return { text: `[영상 메모: ${s.name}]\n${s.notes}` };
       if (s.youtube) return { fileData: { fileUri: canonicalYoutube(s.youtube) } };
       if (s.pdf!.byteLength <= INLINE_MAX_BYTES) {
         return { inlineData: { mimeType: "application/pdf", data: Buffer.from(s.pdf!).toString("base64") } };
@@ -103,6 +105,46 @@ export async function summarizeReports(sources: Source[], watch: WatchItem[]) {
       }
     }
   }
+  throw friendly(lastError);
+}
+
+const VIDEO_PROMPT = `이 투자 영상을 나중에 다른 자료와 함께 한 장 브리핑으로 합칠 수 있게, 한국어로 자세한 메모를 작성함 ("~음/~함" 체).
+- 첫 줄: 채널·화자, 영상 제목(알 수 있으면)
+- 다루는 종목·산업, 화자의 결론(매수·매도·관망 등)
+- 핵심 주장과 근거를 글머리표로 (말한 순서대로, 빠짐없이)
+- 언급된 숫자(목표가, 실적, 밸류에이션, 날짜)는 그대로 단위와 함께
+- 리스크·반대 논리
+영상에 없는 내용은 쓰지 않음.`;
+// 영상은 소리(말) 위주라 화면은 5초에 한 장, 낮은 해상도로만 봐서 처리 시간을 줄임
+const VIDEO_MODELS = ["gemini-flash-lite-latest", "gemini-flash-latest"]; // 시험해 보니 영상은 Lite가 7~24초, Flash는 붐벼서 3분 넘게 걸리기도 함
+const VIDEO_DEADLINE_MS = 270_000; // 서버 함수 제한(300초) 안에 오류로라도 끝나게
+
+export async function summarizeVideo(url: string) {
+  if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY가 설정되지 않음 (Vercel 환경변수에 추가 필요)");
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const deadline = Date.now() + VIDEO_DEADLINE_MS;
+  let lastError: unknown;
+  for (const model of VIDEO_MODELS) {
+    const left = deadline - Date.now();
+    if (left < 20_000) break;
+    try {
+      const res = await ai.models.generateContent({
+        model,
+        contents: [{ role: "user", parts: [{ fileData: { fileUri: canonicalYoutube(url) }, videoMetadata: { fps: 0.2 } }, { text: VIDEO_PROMPT }] }],
+        config: { mediaResolution: MediaResolution.MEDIA_RESOLUTION_LOW, abortSignal: AbortSignal.timeout(left) },
+      });
+      const text = res.text?.trim();
+      if (!text) throw new Error(`영상 메모가 비어 있음 (${res.candidates?.[0]?.finishReason ?? "원인 불명"})`);
+      return text;
+    } catch (e) {
+      lastError = e;
+      if (e instanceof ApiError && (e.status === 503 || e.status === 429 || e.status === 500)) continue;
+      if (e instanceof Error && (e.name === "AbortError" || e.name === "TimeoutError")) break;
+      throw friendly(e);
+    }
+  }
+  if (lastError instanceof Error && (lastError.name === "AbortError" || lastError.name === "TimeoutError"))
+    throw new Error("영상이 길거나 Gemini가 붐벼서 4분 30초 안에 못 읽음. 잠시 뒤 다시 시도");
   throw friendly(lastError);
 }
 

@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { AUTH_COOKIE, authToken } from "@/lib/auth";
 import { insert, remove, select, storage, update, type Security, type WatchItem } from "@/lib/db";
 import { getWatchItems } from "@/lib/queries";
-import { summarizeReports } from "@/lib/summarize";
+import { summarizeReports, summarizeVideo } from "@/lib/summarize";
 import { fetchYearPrices } from "@/lib/yahoo";
 
 export type ActionState = { ok?: string; error?: string } | null;
@@ -229,22 +229,39 @@ export async function prepareReportUpload(names: string[]): Promise<{ uploads?: 
 
 const YOUTUBE = /^https:\/\/(www\.|m\.)?(youtube\.com\/(watch\?v=|shorts\/|live\/)|youtu\.be\/)[\w-]{6,}/;
 
+// 유튜브 영상 하나를 먼저 읽어 메모로 돌려줌. 영상마다 따로 불러서 서버 시간 제한(300초)을 영상별로 씀
+export async function readYoutube(url: string): Promise<{ notes?: string; error?: string }> {
+  try {
+    await requireAuth();
+    const u = url.trim();
+    if (!YOUTUBE.test(u)) throw new Error(`유튜브 영상 주소가 아님: ${u}`);
+    return { notes: await summarizeVideo(u) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function createReportSummary(
   files: { path: string; name: string }[],
   youtube: string[],
   reportDate: string,
+  videoNotes: { url: string; notes: string }[] = [],
 ): Promise<{ id?: string; error?: string }> {
   try {
     await requireAuth();
     const links = youtube.map((u) => u.trim()).filter(Boolean);
-    const bad = links.find((u) => !YOUTUBE.test(u));
+    const bad = [...links, ...videoNotes.map((v) => v.url)].find((u) => !YOUTUBE.test(u));
     if (bad) throw new Error(`유튜브 영상 주소가 아님: ${bad}`);
-    if (files.length === 0 && links.length === 0) throw new Error("PDF나 유튜브 링크가 없음");
+    if (files.length === 0 && links.length === 0 && videoNotes.length === 0) throw new Error("PDF나 유튜브 링크가 없음");
     const [pdfs, watch] = await Promise.all([
       Promise.all(files.map(async (f) => ({ name: f.name, pdf: await storage.download("reports", f.path) }))),
       getWatchItems(),
     ]);
-    const sources = [...pdfs, ...links.map((u) => ({ name: u, youtube: u }))];
+    const sources = [
+      ...pdfs,
+      ...links.map((u) => ({ name: u, youtube: u })),
+      ...videoNotes.map((v) => ({ name: v.url, notes: v.notes.slice(0, 30000) })),
+    ];
     const { text, model } = await summarizeReports(sources, watch);
     const title = text.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? null;
     const base = {
