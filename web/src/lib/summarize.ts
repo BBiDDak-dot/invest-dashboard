@@ -52,13 +52,19 @@ function watchContext(items: WatchItem[]) {
 
 export type Source = { name: string; pdf?: ArrayBuffer; youtube?: string };
 
+// Gemini는 youtube.com/watch?v=ID 형태만 영상으로 알아봄. &t=6s 같은 꼬리나 youtu.be·shorts 주소는 웹페이지로 보고 400을 냄
+export function canonicalYoutube(url: string) {
+  const id = url.match(/(?:[?&]v=|youtu\.be\/|\/shorts\/|\/live\/)([\w-]{6,})/)?.[1];
+  return id ? `https://www.youtube.com/watch?v=${id}` : url;
+}
+
 export async function summarizeReports(sources: Source[], watch: WatchItem[]) {
   if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY가 설정되지 않음 (Vercel 환경변수에 추가 필요)");
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   // 작은 PDF는 요청에 바로 담고, 큰 PDF(요청 한도 20MB를 base64로 넘기는 것)는 Gemini 파일 저장소에 올려서 참조함 (최대 50MB)
   const parts: Part[] = await Promise.all(
     sources.map(async (s): Promise<Part> => {
-      if (s.youtube) return { fileData: { fileUri: s.youtube } };
+      if (s.youtube) return { fileData: { fileUri: canonicalYoutube(s.youtube) } };
       if (s.pdf!.byteLength <= INLINE_MAX_BYTES) {
         return { inlineData: { mimeType: "application/pdf", data: Buffer.from(s.pdf!).toString("base64") } };
       }
