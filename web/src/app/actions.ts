@@ -209,6 +209,17 @@ export async function saveEarningsNote(id: string, note: string): Promise<Action
   return state;
 }
 
+export async function saveUsEarningsNote(id: string, note: string): Promise<ActionState> {
+  const state = await run(async () => {
+    if (!/^\d{1,10}-\d{4}\.[1-4]Q$/.test(id)) throw new Error("잘못된 실적 번호");
+    const text = note.trim();
+    await update("us_earnings", `id=eq.${id}`, { note: text || null, note_updated_at: text ? new Date().toISOString() : null });
+    return text ? "저장됨" : "메모 삭제됨";
+  });
+  if (!state?.error) revalidatePath("/earnings/us");
+  return state;
+}
+
 // ---------- 리포트 ----------
 
 export async function prepareReportUpload(names: string[]): Promise<{ uploads?: { path: string; url: string }[]; error?: string }> {
