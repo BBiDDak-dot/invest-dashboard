@@ -3,36 +3,15 @@ import { Card, Empty } from "@/components/Card";
 import { EarningsNote } from "@/components/EarningsNote";
 import { SetupNotice } from "@/components/SetupNotice";
 import type { EarningsRow } from "@/lib/db";
-import { changeColor, num } from "@/lib/format";
+import { num } from "@/lib/format";
 import { daysAgo, getEarnings, getWatchItems } from "@/lib/queries";
+import { chip, MarketTabs, Pct, qLabel, qSeason, recentQuarters } from "./shared";
 
 const VIEWS = { grow: "동반 성장", all: "전체", memo: "메모" } as const;
 const MINS = { "0": "0%↑", "10": "10%↑", "30": "30%↑" } as const;
 const SORTS = { date: "최신순", op: "영업이익 YoY순" } as const;
 type Params = { q: string; view: keyof typeof VIEWS; min: keyof typeof MINS; sort: keyof typeof SORTS };
 const DEFAULTS: Params = { q: "", view: "grow", min: "0", sort: "date" };
-
-// 통상의 실적 발표 기간: 1Q는 4월~5/15, 2Q는 7월~8/14, 3Q는 10월~11/14(분기·반기보고서 마감), 4Q는 1월~3/31(사업보고서 마감)
-const SEASON = { 1: "4/1~5/15", 2: "7/1~8/14", 3: "10/1~11/14", 4: "1/1~3/31" } as const;
-
-// 오늘 기준 발표가 시작된 가장 최근 분기부터 n개 (예: 10/6이면 26.3Q, 26.2Q, 26.1Q …)
-function recentQuarters(today: string, n: number) {
-  const y = Number(today.slice(0, 4));
-  const m = Number(today.slice(5, 7));
-  let [yy, qq] = m <= 3 ? [y - 1, 4] : [y, Math.floor((m - 1) / 3)];
-  const out: string[] = [];
-  for (let i = 0; i < n; i++) {
-    out.push(`${yy}.${qq}Q`);
-    [yy, qq] = qq === 1 ? [yy - 1, 4] : [yy, qq - 1];
-  }
-  return out;
-}
-
-const qLabel = (q: string) => `'${q.slice(2, 4)}.${q.slice(5)}`;
-const qSeason = (q: string) => SEASON[Number(q.slice(5, 6)) as 1 | 2 | 3 | 4];
-
-const chip = (on: boolean) =>
-  `rounded-md px-2.5 py-1 ${on ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"}`;
 
 // 같은 회사·같은 분기 공시가 여러 건(잠정실적, 정기보고서, 정정)이면 가장 먼저 나온 공시 하나만.
 // 같은 날 여러 건이면 연결 기준을 고름
@@ -57,17 +36,6 @@ const turned = (r: EarningsRow) => (r.op_turn ?? "").includes("흑자");
 function grows(r: EarningsRow, p: Params) {
   const min = Number(p.min);
   return r.revenue_yoy != null && r.revenue_yoy > min && ((r.op_yoy != null && r.op_yoy > min) || turned(r));
-}
-
-function Pct({ v, turn }: { v: number | null; turn?: string | null }) {
-  if (turn) return <span className={turn.includes("흑자") ? "text-red-600" : "text-blue-600"}>{turn}</span>;
-  if (v == null) return <span className="text-zinc-400">-</span>;
-  return (
-    <span className={changeColor(v)}>
-      {v > 0 ? "+" : ""}
-      {num(v, 1)}%
-    </span>
-  );
 }
 
 function Item({ r, watch }: { r: EarningsRow; watch: Set<string> }) {
@@ -144,7 +112,7 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
   return (
     <>
       <SetupNotice />
-      <h1 className="text-lg font-semibold">실적 스크리닝</h1>
+      <MarketTabs us={false} />
       <Card title="분기 실적 최초 공시 (코스피·코스닥)">
         <div className="mb-3 space-y-2">
           {group("보기", VIEWS, "view")}

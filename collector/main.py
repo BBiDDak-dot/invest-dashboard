@@ -12,6 +12,7 @@ import earnings
 import financials
 import flows
 import stock_flows
+import us_earnings
 import macro
 import news_clips
 import prices
@@ -39,6 +40,7 @@ def main() -> None:
         ("시세", lambda: prices.collect(start, watchlist)),
         ("공시", lambda: disclosures.collect(start, watchlist)),
         ("실적 스크리닝", lambda: earnings.collect(start)),
+        ("미국 실적", us_earnings.collect),
         ("투자지표", lambda: macro.collect(start)),
         ("재무", lambda: financials.collect(watchlist)),
         ("수급", lambda: flows.collect(start)),

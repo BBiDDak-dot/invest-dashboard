@@ -45,6 +45,13 @@ export async function insert<T>(table: string, rows: object | object[], { upsert
   return res.json();
 }
 
+// 행 수만 셈 (PostgREST count=exact)
+export async function count(table: string, query = ""): Promise<number> {
+  if (!dbConfigured) return 0;
+  const res = await call(`/rest/v1/${table}?${query}&limit=1`, { headers: { Prefer: "count=exact" } });
+  return Number(res.headers.get("content-range")?.split("/")[1] ?? 0);
+}
+
 export async function update(table: string, query: string, patch: object) {
   await call(`/rest/v1/${table}?${query}`, {
     method: "PATCH",
@@ -233,6 +240,31 @@ export type EarningsRow = {
   op_turn: string | null;
   note: string | null;
   note_updated_at: string | null;
+};
+
+export type UsEarningsRow = {
+  id: string;
+  cik: number;
+  ticker: string;
+  name: string;
+  period: string;
+  end_date: string | null;
+  filed: string | null;
+  form: string | null;
+  url: string | null;
+  derived_q4: boolean | null;
+  revenue: number | null;
+  revenue_prev_y: number | null;
+  revenue_yoy: number | null;
+  op: number | null;
+  op_prev_y: number | null;
+  op_yoy: number | null;
+  op_turn: string | null;
+  ni: number | null;
+  ni_prev_y: number | null;
+  ni_yoy: number | null;
+  ni_turn: string | null;
+  note: string | null;
 };
 
 export type Report = {

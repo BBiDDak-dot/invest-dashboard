@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { saveEarningsNote } from "@/app/actions";
+import { saveEarningsNote, saveUsEarningsNote } from "@/app/actions";
 
 // 실적 공시마다 내 메모. 없으면 "메모" 버튼, 있으면 내용을 보여 주고 누르면 편집
-export function EarningsNote({ id, note }: { id: string; note: string | null }) {
+export function EarningsNote({ id, note, us = false }: { id: string; note: string | null; us?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(note ?? "");
   const [draft, setDraft] = useState("");
@@ -18,7 +18,7 @@ export function EarningsNote({ id, note }: { id: string; note: string | null }) 
   };
   const save = () =>
     start(async () => {
-      const r = await saveEarningsNote(id, draft);
+      const r = await (us ? saveUsEarningsNote : saveEarningsNote)(id, draft);
       if (r?.error) return setError(r.error);
       setSaved(draft.trim());
       setEditing(false);

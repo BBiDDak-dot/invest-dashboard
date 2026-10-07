@@ -1,9 +1,11 @@
 import {
+  count,
   inList,
   select,
   selectAll,
   type Disclosure,
   type EarningsRow,
+  type UsEarningsRow,
   type Financial,
   type MacroObservation,
   type MacroSeries,
@@ -172,6 +174,16 @@ export async function getStockFlows(days: number): Promise<{ from: string; to: s
 
 export async function getEarnings(days: number): Promise<EarningsRow[]> {
   return selectAll<EarningsRow>("earnings_screen", `select=*&date=gte.${daysAgo(days)}&order=date.desc,id.desc`);
+}
+
+export async function getUsEarnings(period: string): Promise<UsEarningsRow[]> {
+  return selectAll<UsEarningsRow>("us_earnings", `select=*&period=eq.${period}&order=filed.desc.nullslast,revenue.desc`);
+}
+
+// 분기별 저장된 회사 수 (분기 칩 숫자)
+export async function countUsEarnings(periods: string[], minRevenue: number): Promise<Map<string, number>> {
+  const n = await Promise.all(periods.map((p) => count("us_earnings", `select=id&period=eq.${p}&revenue=gte.${minRevenue}`)));
+  return new Map(periods.map((p, i) => [p, n[i]]));
 }
 
 export async function getReports(limit = 60): Promise<Omit<Report, "summary">[]> {
