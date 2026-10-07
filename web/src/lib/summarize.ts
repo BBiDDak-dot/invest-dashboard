@@ -6,6 +6,7 @@ import type { WatchItem } from "./db";
 const MODELS = [process.env.GEMINI_MODEL || "gemini-pro-latest", "gemini-flash-latest", "gemini-flash-lite-latest"];
 // 과부하(503)는 보통 잠깐이라 모델마다 잠시 기다렸다 한 번 더 시도함
 const RETRY_WAIT_MS = [0, 4000];
+const MODEL_WAIT_MS = [120_000, 90_000]; // Pro, Flash 순서로 이만큼만 기다리고, 마지막 Flash-Lite는 남은 시간 전부
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const INLINE_MAX_BYTES = 14 * 1024 * 1024; // base64로 늘어나도 요청 한도(20MB) 안에 드는 크기
 
@@ -83,15 +84,20 @@ export async function summarizeReports(sources: Source[], watch: WatchItem[]) {
     text: `오늘 자료 ${sources.length}건(${sources.map((s) => s.name).join(", ")})을 한 페이지로 요약해 줘.\n\n내 관심종목:\n${watchContext(watch)}`,
   });
 
+  // 붐비는 날엔 Pro·Flash가 응답 없이 몇 분씩 붙잡고 있기도 해서, 모델마다 기다리는 시간을 정하고 넘기면 다음 모델로.
+  // 전체는 서버 함수 제한(300초) 안에 끝나게 함
+  const deadline = Date.now() + 280_000;
   let lastError: unknown;
-  for (const model of MODELS) {
+  for (const [mi, model] of MODELS.entries()) {
     for (const wait of RETRY_WAIT_MS) {
       if (wait) await sleep(wait);
+      const left = deadline - Date.now();
+      if (left < 15_000) break;
       try {
         const res = await ai.models.generateContent({
           model,
           contents: [{ role: "user", parts }],
-          config: { systemInstruction: SYSTEM },
+          config: { systemInstruction: SYSTEM, abortSignal: AbortSignal.timeout(Math.min(left, MODEL_WAIT_MS[mi] ?? left)) },
         });
         const text = res.text?.trim();
         if (!text) throw new Error(`요약 결과가 비어 있음 (${res.candidates?.[0]?.finishReason ?? "원인 불명"})`);
@@ -99,12 +105,15 @@ export async function summarizeReports(sources: Source[], watch: WatchItem[]) {
       } catch (e) {
         lastError = e;
         // 과부하(503)는 같은 모델로 한 번 더, 한도 초과(429)는 바로 다음 모델로. 그 밖의 오류는 중단
+        if (e instanceof Error && (e.name === "AbortError" || e.name === "TimeoutError")) break;
         if (e instanceof ApiError && e.status === 503) continue;
         if (e instanceof ApiError && e.status === 429) break;
         throw friendly(e);
       }
     }
   }
+  if (lastError instanceof Error && (lastError.name === "AbortError" || lastError.name === "TimeoutError"))
+    throw new Error("Gemini가 붐벼서 시간 안에 답하지 못함. 잠시 뒤 다시 시도");
   throw friendly(lastError);
 }
 
