@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card } from "@/components/Card";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { SetupNotice } from "@/components/SetupNotice";
 import { StockSearch } from "@/components/StockSearch";
 import { WatchSheet } from "@/components/WatchSheet";
@@ -39,6 +40,7 @@ export default async function WatchlistPage({ searchParams }: PageProps<"/watchl
   return (
     <>
       <SetupNotice />
+      <AutoRefresh />
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-lg font-semibold">관심종목</h1>
         <div className="text-sm text-zinc-500">
