@@ -1,0 +1,12 @@
+name: probe
+on: push
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36"
+          echo NAVER; curl -s -A "$UA" "https://polling.finance.naver.com/api/realtime/domestic/stock/005930,000660,035420" | head -c 2500; echo
+          echo NAVER2; curl -s -A "$UA" "https://m.stock.naver.com/api/stock/005930/basic" | head -c 1500; echo
+          for s in AAPL 005930.KS KRW=X; do echo YH $s; curl -s -A "$UA" "https://query1.finance.yahoo.com/v8/finance/chart/$s?range=1d&interval=5m" | python3 -c "import sys,json; m=json.load(sys.stdin)['chart']['result'][0]['meta']; print({k:m.get(k) for k in ['regularMarketPrice','chartPreviousClose','previousClose','regularMarketTime','gmtoffset','currency','marketState']})"; done
+          echo YQ; curl -s -A "$UA" "https://query1.finance.yahoo.com/v7/finance/quote?symbols=AAPL,KRW=X" | head -c 300; echo
