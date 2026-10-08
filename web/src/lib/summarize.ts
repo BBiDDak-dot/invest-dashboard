@@ -154,6 +154,9 @@ export async function summarizeVideo(url: string) {
   }
   if (lastError instanceof Error && (lastError.name === "AbortError" || lastError.name === "TimeoutError"))
     throw new Error("영상이 길거나 Gemini가 붐벼서 4분 30초 안에 못 읽음. 잠시 뒤 다시 시도");
+  // 모든 모델이 곧바로 500을 내면 Gemini가 영상 자체를 못 가져온 것 (다른 영상은 정상으로 읽힘)
+  if (lastError instanceof ApiError && lastError.status === 500)
+    throw new Error("Gemini가 이 영상을 열지 못함. 진행 중이거나 막 끝난 라이브, 비공개·일부 공개, 연령 제한 영상은 읽을 수 없음. 라이브는 다시보기가 올라온 뒤 일반 영상 주소로 시도");
   throw friendly(lastError);
 }
 
