@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card, Empty } from "@/components/Card";
 import { MacroGrid } from "@/components/MacroGrid";
 import { SentimentNote } from "@/components/SentimentNote";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { SetupNotice } from "@/components/SetupNotice";
 import { TopPicks } from "@/components/TopPicks";
 import { getDisclosures, getMacro, getWatchlist, isSentiment } from "@/lib/queries";
@@ -11,6 +12,7 @@ export default async function Home() {
   return (
     <>
       <SetupNotice />
+      <AutoRefresh />
       <Card title="★ TOP PICK">
         <TopPicks rows={watch.filter((w) => w.starred)} />
       </Card>

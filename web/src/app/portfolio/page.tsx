@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card } from "@/components/Card";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { SetupNotice } from "@/components/SetupNotice";
 import { EditCell, StarButton } from "@/components/EditCell";
 import { Sparkline } from "@/components/Sparkline";
@@ -246,6 +247,7 @@ export default async function PortfolioPage() {
   return (
     <>
       <SetupNotice />
+      <AutoRefresh />
       <h1 className="text-lg font-semibold">포트폴리오</h1>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

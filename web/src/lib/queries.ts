@@ -19,6 +19,8 @@ import {
   type WatchItem,
 } from "./db";
 
+import { liveFx, liveQuotes } from "./live";
+
 const FX_SERIES = "YF:KRW=X"; // 원/달러 환율 (관심종목 화면 상단에도 표시)
 
 export const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10);
@@ -50,7 +52,10 @@ export async function getWatchlist(): Promise<WatchRow[]> {
     select<Price>("latest_prices", "select=ticker,date,close,change_pct"),
     select<Financial>("financials_quarterly", `select=*&period_end=gte.${daysAgo(800)}&order=period_end`),
   ]);
+  // 현재가(장중 실시간)가 있으면 수집기가 저장한 마지막 종가보다 우선
+  const live = await liveQuotes(items);
   const byTicker = new Map(latest.map((p) => [p.ticker, p]));
+  for (const [t, p] of live) if (!byTicker.get(t) || byTicker.get(t)!.date <= p.date) byTicker.set(t, p);
   // 종목별로 따로 조회 (PostgREST 기본 최대 1000행 제한 때문)
   const histories = await Promise.all(items.map((i) => getPrices(i.ticker, 365)));
   return items.map((i, n) => {
@@ -59,7 +64,8 @@ export async function getWatchlist(): Promise<WatchRow[]> {
     return {
       ...i,
       latest: p,
-      history: histories[n].map((h) => h.close),
+      // 오늘 현재가가 아직 저장 전이면 차트 끝에 붙임
+      history: [...histories[n].map((h) => h.close), ...(p && histories[n].length && histories[n].at(-1)!.date < p.date ? [p.close] : [])],
       upside: p && i.target_price ? (i.target_price / p.close - 1) * 100 : null,
       debtRatio: i.debt_ratio ?? auto.debtRatio,
       reserveRatio: i.reserve_ratio ?? auto.reserveRatio,
@@ -86,7 +92,12 @@ export async function getFinancials(tickers: string[]): Promise<Financial[]> {
 }
 
 export async function getFx(): Promise<MacroObservation | undefined> {
-  return (await select<MacroObservation>("macro_observations", `select=*&series_id=eq.${encodeURIComponent(FX_SERIES)}&order=date.desc&limit=1`))[0];
+  const [saved, live] = await Promise.all([
+    select<MacroObservation>("macro_observations", `select=*&series_id=eq.${encodeURIComponent(FX_SERIES)}&order=date.desc&limit=1`),
+    liveFx(),
+  ]);
+  if (live && (!saved[0] || saved[0].date <= live.date)) return { series_id: FX_SERIES, date: live.date, value: live.close } as MacroObservation;
+  return saved[0];
 }
 
 export type MacroRow = MacroSeries & { history: MacroObservation[] };
