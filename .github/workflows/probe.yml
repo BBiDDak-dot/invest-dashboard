@@ -4,5 +4,7 @@ jobs:
   p:
     runs-on: ubuntu-latest
     steps:
-      - run: |
-          curl -s -A "Mozilla/5.0" -H "Accept-Language: ko" "https://www.youtube.com/watch?v=qYq-lTOZXeM" | grep -oE '"(lengthSeconds|isLive|isLiveContent|isUpcoming|title)":"?[^,]{0,80}' | head -10
+      - uses: actions/checkout@v4
+      - run: pip install -q requests && python probe_yt.py
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
