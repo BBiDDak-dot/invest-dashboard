@@ -5,6 +5,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: pip install -q requests && python probe_yt.py
+      - run: |
+          curl -s -A "Mozilla/5.0" "https://www.youtube.com/watch?v=qYq-lTOZXeM" > page.html
+          grep -oE '"(lengthSeconds|isLive|isLiveContent|isUpcoming|startTimestamp|endTimestamp|playabilityStatus|status|reason)":[^,]{0,60}' page.html | sort | uniq -c | head -30
+          grep -oE 'liveBroadcastDetails":\{[^}]*\}' page.html | head -3
+      - run: |
+          pip install -q requests
+          python - <<'PY'
+          import os,requests
+          K=os.environ["GEMINI_API_KEY"]
+          for u in ["https://www.youtube.com/watch?v=dQw4w9WgXcQ","https://www.youtube.com/watch?v=qYq-lTOZXeM"]:
+              b={"contents":[{"parts":[{"file_data":{"file_uri":u},"video_metadata":{"fps":0.2}},{"text":"한 줄 요약"}]}],"generationConfig":{"mediaResolution":"MEDIA_RESOLUTION_LOW"}}
+              r=requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key={K}",json=b,timeout=200)
+              print(u,r.status_code,r.text[:200].replace("\n"," "))
+          PY
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
