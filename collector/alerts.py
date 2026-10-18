@@ -48,7 +48,7 @@ def fmt(v: float, market: str) -> str:
     return f"{v:,.0f}원" if market == "KR" else f"${v:,.2f}"
 
 
-def collect() -> None:
+def collect(test: bool = False) -> None:
     items = db.select("watchlist", "select=ticker,market,name,target_price,upside_alert_at&target_price=not.is.null")
     prices = kr_prices([w["ticker"] for w in items if w["market"] == "KR"])
     for w in items:
@@ -76,7 +76,13 @@ def collect() -> None:
         elif upside < limit - RESET_GAP and w["upside_alert_at"]:
             db.update("watchlist", f"ticker=eq.{w['ticker']}", {"upside_alert_at": None})
     print(f"[알림] {len(items)}종목 확인, {sent}건 발송")
+    if test:  # 설정 확인용: 상승여력 상위 종목을 한 번 보냄 (기록은 남기지 않음)
+        ups = sorted(((w, (w["target_price"] / prices[w["ticker"]] - 1) * 100) for w in items if prices.get(w["ticker"])), key=lambda x: -x[1])[:5]
+        lines = [f"{w['name']} {u:.1f}% (기준 {THRESHOLD[w['market']]:.0f}%)" for w, u in ups]
+        send("✅ 삐딱인베스팅 상승여력 알림 연결 확인\n상승여력 상위:\n" + "\n".join(lines))
 
 
 if __name__ == "__main__":
-    collect()
+    import sys
+
+    collect(test="--test" in sys.argv)

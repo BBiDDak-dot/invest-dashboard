@@ -5,6 +5,11 @@ on:
     - cron: "*/30 0-6 * * 1-5"    # 09:00~15:30 KST 국내장
     - cron: "*/30 13-20 * * 1-5"  # 미국장 (서머타임 22:30~05:00 KST 포함)
   workflow_dispatch:
+    inputs:
+      test:
+        description: "연결 확인 메시지 보내기"
+        type: boolean
+        default: false
 
 jobs:
   alerts:
@@ -18,7 +23,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install requests
-      - run: python alerts.py
+      - run: python alerts.py ${{ inputs.test && '--test' || '' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
