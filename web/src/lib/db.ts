@@ -238,6 +238,12 @@ export type EarningsRow = {
   op_prev_y: number | null;
   op_yoy: number | null;
   op_turn: string | null;
+  ni: number | null;
+  ni_prev_q: number | null;
+  ni_qoq: number | null;
+  ni_prev_y: number | null;
+  ni_yoy: number | null;
+  ni_turn: string | null;
   note: string | null;
   note_updated_at: string | null;
 };
@@ -265,6 +271,16 @@ export type UsEarningsRow = {
   ni_yoy: number | null;
   ni_turn: string | null;
   note: string | null;
+};
+
+export type EarningsReport = {
+  id: string; // kr-접수번호 / us-cik-분기
+  market: "KR" | "US";
+  name: string;
+  period: string | null;
+  body: string;
+  model: string | null;
+  created_at: string;
 };
 
 export type Report = {

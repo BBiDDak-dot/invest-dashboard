@@ -52,3 +52,35 @@ export function MarketTabs({ us }: { us: boolean }) {
     </div>
   );
 }
+
+type Growth = {
+  revenue: number | null; revenue_prev_y: number | null; revenue_yoy: number | null;
+  op: number | null; op_prev_y: number | null; op_yoy: number | null; op_turn: string | null;
+  ni: number | null; ni_prev_y: number | null; ni_yoy: number | null; ni_turn: string | null;
+};
+
+// 항목별 판정: 전년 동기 대비 증가(흑자전환 포함) / 판단 불가(값이 없음) / 미달
+function judge(now: number | null, prev: number | null, yoy: number | null, turn: string | null, min: number) {
+  if (now == null || prev == null) return "none";
+  return (yoy != null && yoy > min) || (turn ?? "").includes("흑자") ? "up" : "fail";
+}
+
+// 매출·영업이익·당기순이익이 셋 다 늘어난 곳만 (값이 없는 항목이 있으면 제외)
+export function allGrow(r: Growth, min: number) {
+  return (
+    judge(r.revenue, r.revenue_prev_y, r.revenue_yoy, null, min) === "up" &&
+    judge(r.op, r.op_prev_y, r.op_yoy, r.op_turn, min) === "up" &&
+    judge(r.ni, r.ni_prev_y, r.ni_yoy, r.ni_turn, min) === "up"
+  );
+}
+
+// 종목을 누르면 여는 실적 분석 리포트 주소
+export const reportHref = (us: boolean, id: string) => `/earnings/r/${us ? "us" : "kr"}-${id}`;
+
+export function ReportLink({ href, name, done }: { href: string; name: string; done: boolean }) {
+  return (
+    <Link href={href} className="font-medium hover:underline" title="실적 상승 분석 리포트">
+      {name} <span className={`text-[11px] font-normal ${done ? "text-emerald-600" : "text-zinc-400"}`}>{done ? "리포트 ✓" : "리포트 ›"}</span>
+    </Link>
+  );
+}

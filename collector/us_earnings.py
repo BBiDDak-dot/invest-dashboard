@@ -59,10 +59,6 @@ def shown_quarters(today: dt.date, n: int = SHOWN) -> list[str]:
     return out
 
 
-def _prev_year(q: str) -> str:
-    return f"{int(q[:4]) - 1}{q[4:]}"
-
-
 def _frames(concept: str, quarters: list[str], years: list[int]) -> dict[int, dict[str, dict]]:
     """{cik: {분기: {val, start, end, accn, form}}}. 명시된 분기 값 + 연간에서 계산한 4분기(또는 빠진 분기)"""
     out: dict[int, dict[str, dict]] = {}
@@ -92,6 +88,17 @@ def _frames(concept: str, quarters: list[str], years: list[int]) -> dict[int, di
                 qs[q] = {"val": d["val"] - sum(v["val"] for v in inside), "start": s, "end": e, "accn": d["accn"], "derived": True}
         time.sleep(0.12)
     return out
+
+
+def _year_ago(series: dict[str, dict], cur: dict | None) -> dict | None:
+    """전년 동기 값. frames는 같은 회사라도 해마다 회계분기를 다른 달력 분기에 붙이기도 해서
+    (예: 크로거 8월 중순 마감 분기가 한 해는 2Q, 다음 해는 3Q) 분기 이름 대신 마감일이 1년 전인 값을 찾음"""
+    if not cur:
+        return None
+    for v in series.values():
+        if 345 <= (cur["end"] - v["end"]).days <= 385 and abs((v["end"] - v["start"]).days - (cur["end"] - cur["start"]).days) <= 20:
+            return v
+    return None
 
 
 def _growth(now, prev):
@@ -142,19 +149,20 @@ def collect() -> None:
     rows = []
     for cik, (ticker, name) in tickers.items():
         for q in shown:
-            p = _prev_year(q)
             # 이번 분기 값이 있는 첫 개념. 전년 동기도 있는 개념이 있으면 그것을 우선
             have = [c for c in REVENUE if q in revenue[c].get(cik, {})]
-            both = [c for c in have if p in revenue[c][cik]]
+            both = [c for c in have if _year_ago(revenue[c][cik], revenue[c][cik][q])]
             c = (both or have or [None])[0]
             cur = revenue[c][cik][q] if c else None
             o = op.get(cik, {})
             if not cur or cur["val"] / 1e6 < MIN_REVENUE:
                 continue
-            prev = revenue[c][cik].get(p)
-            oc, op_ = o.get(q), o.get(p)
+            prev = _year_ago(revenue[c][cik], cur)
+            oc = o.get(q)
+            op_ = _year_ago(o, oc)
             n = ni.get(cik, {})
-            nc, np_ = n.get(q), n.get(p)
+            nc = n.get(q)
+            np_ = _year_ago(n, nc)
             row = {
                 "id": f"{cik}-{q}",
                 "cik": cik,
