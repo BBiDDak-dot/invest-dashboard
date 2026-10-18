@@ -5,7 +5,7 @@ import { SetupNotice } from "@/components/SetupNotice";
 import type { EarningsRow } from "@/lib/db";
 import { num } from "@/lib/format";
 import { daysAgo, getEarnings, getWatchItems } from "@/lib/queries";
-import { chip, MarketTabs, Pct, qLabel, qSeason, recentQuarters } from "./shared";
+import { allGrow, chip, MarketTabs, Pct, qLabel, qSeason, recentQuarters } from "./shared";
 
 const VIEWS = { grow: "동반 성장", all: "전체", memo: "메모" } as const;
 const MINS = { "0": "0%↑", "10": "10%↑", "30": "30%↑" } as const;
@@ -30,13 +30,8 @@ function firstDisclosures(rows: EarningsRow[]) {
 // 공시 종류: 잠정실적 / 분기보고서 / 반기보고서 / 사업보고서
 const kind = (title: string) => (title.includes("잠정") ? "잠정실적" : (title.match(/분기보고서|반기보고서|사업보고서/)?.[0] ?? "공시"));
 
-// 기준: 분기 실적의 전년 동기 대비(YoY). 영업이익이 적자→흑자로 돌아선 경우도 성장으로 봄
-const turned = (r: EarningsRow) => (r.op_turn ?? "").includes("흑자");
-
-function grows(r: EarningsRow, p: Params) {
-  const min = Number(p.min);
-  return r.revenue_yoy != null && r.revenue_yoy > min && ((r.op_yoy != null && r.op_yoy > min) || turned(r));
-}
+// 기준: 분기 실적의 전년 동기 대비(YoY). 매출액·영업이익·당기순이익 모두 증가(흑자전환 포함)
+const grows = (r: EarningsRow, p: Params) => allGrow(r, Number(p.min));
 
 function Item({ r, watch }: { r: EarningsRow; watch: Set<string> }) {
   const opm = r.revenue && r.op != null ? (r.op / r.revenue) * 100 : null;
@@ -57,7 +52,7 @@ function Item({ r, watch }: { r: EarningsRow; watch: Set<string> }) {
           공시 원문
         </a>
       </div>
-      <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm tabular-nums sm:grid-cols-3">
+      <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm tabular-nums sm:grid-cols-4">
         <div>
           <span className="text-xs text-zinc-500">매출액 </span>
           {num(r.revenue, 0)}억 <Pct v={r.revenue_yoy} />
@@ -67,6 +62,11 @@ function Item({ r, watch }: { r: EarningsRow; watch: Set<string> }) {
           <span className="text-xs text-zinc-500">영업이익 </span>
           {num(r.op, 0)}억 <Pct v={r.op_yoy} turn={r.op_turn} />
           <div className="text-[11px] text-zinc-400">전년 동기 {num(r.op_prev_y, 0)}억</div>
+        </div>
+        <div>
+          <span className="text-xs text-zinc-500">순이익 </span>
+          {num(r.ni, 0)}억 <Pct v={r.ni_yoy} turn={r.ni_turn} />
+          <div className="text-[11px] text-zinc-400">전년 동기 {num(r.ni_prev_y, 0)}억</div>
         </div>
         <div>
           <span className="text-xs text-zinc-500">영업이익률 </span>
@@ -129,7 +129,7 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
         </div>
         <p className="mb-2 text-xs text-zinc-500">
           {qLabel(p.q)} 실적 (통상 {qSeason(p.q)} 발표) · {shown.length}개 기업 (실적 공시 {rows.length}개 기업 중)
-          {p.view === "grow" && ` · 분기 매출액과 영업이익이 모두 전년 동기 대비 ${p.min}% 넘게 늘었거나 영업이익이 흑자전환한 곳`}
+          {p.view === "grow" && ` · 분기 매출액·영업이익·당기순이익이 모두 전년 동기 대비 ${p.min}% 넘게 늘어난 곳 (흑자전환 포함, 없는 항목은 나머지 둘로 판단)`}
         </p>
         {shown.length === 0 ? (
           <Empty>

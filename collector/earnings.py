@@ -1,4 +1,4 @@
-"""실적 스크리닝: 코스피·코스닥 상장사의 분기 실적 공시에서 매출액·영업이익을 뽑음.
+"""실적 스크리닝: 코스피·코스닥 상장사의 분기 실적 공시에서 매출액·영업이익·당기순이익을 뽑음.
 
 1) 영업(잠정)실적(공정공시): 원문(document.xml)의 표준 서식 표에서 당기·전기·전년동기 값.
 2) 분기·반기·사업보고서: 잠정실적을 내지 않는 회사도 있어 정기보고서도 저장함.
@@ -26,6 +26,7 @@ KEEP_DAYS = 400
 PERIODIC_BUDGET_SEC = 15 * 60
 REVENUE_NAMES = {"매출액", "수익(매출액)", "영업수익", "매출", "매출액(수익)"}
 OP_NAMES = {"영업이익", "영업이익(손실)", "영업손실"}
+NI_RE = re.compile(r"^(연결)?(당기|분기|반기)순(이익|손실|이익\(손실\))$")
 # 정기보고서 제목 → 보고서 코드. 12월 결산 회사만 (다른 결산월은 분기가 어긋나 건너뜀)
 REPORT_CODES = {("분기보고서", 3): "11013", ("반기보고서", 6): "11012", ("분기보고서", 9): "11014", ("사업보고서", 12): "11011"}
 
@@ -50,7 +51,7 @@ def parse(doc: str) -> dict | None:
     scale = {"원": 1e-8, "천원": 1e-5, "백만원": 1e-2, "억원": 1, "십억원": 10, "조원": 1e4}.get(unit or "", None)
     out = {}
     for r in rows:
-        for key, label in (("revenue", "매출액"), ("op", "영업이익")):
+        for key, label in (("revenue", "매출액"), ("op", "영업이익"), ("ni", "당기순이익")):
             # "영업이익" 행이 "영업이익(손실)"로 적히기도 함
             if r and r[0].startswith(label) and len(r) >= 9 and r[1].startswith("당해") and key not in out:
                 v = r[2:9]
@@ -64,7 +65,10 @@ def parse(doc: str) -> dict | None:
         return None
     if scale is None:
         return None
-    for k in ("revenue", "revenue_prev_q", "revenue_prev_y", "op", "op_prev_q", "op_prev_y"):
+    # 순이익 행이 없는 서식도 있음. 한 번에 올리는 행들은 칸 구성이 같아야 해서 빈 값으로 채움
+    for k in ("ni", "ni_prev_q", "ni_qoq", "ni_prev_y", "ni_yoy", "ni_turn"):
+        out.setdefault(k, None)
+    for k in ("revenue", "revenue_prev_q", "revenue_prev_y", "op", "op_prev_q", "op_prev_y", "ni", "ni_prev_q", "ni_prev_y"):
         if out.get(k) is not None:
             out[k] = round(out[k] * scale, 1)  # 억원으로 통일
     return out
@@ -105,7 +109,7 @@ def _amount(s) -> float | None:
 
 
 def _multi(key: str, corp_codes: list[str], year: int, reprt_code: str, deadline: float) -> dict[str, dict]:
-    """여러 회사 주요계정 → {corp_code: {"revenue": {...}, "op": {...}}}. 연결 우선, 없으면 별도. 시간이 다 되면 거기까지만."""
+    """여러 회사 주요계정 → {corp_code: {"revenue": {...}, "op": {...}, "ni": {...}}}. 연결 우선, 없으면 별도. 시간이 다 되면 거기까지만."""
     out: dict[str, dict] = {}
     for i in range(0, len(corp_codes), 100):
         if time.time() > deadline:
@@ -120,12 +124,14 @@ def _multi(key: str, corp_codes: list[str], year: int, reprt_code: str, deadline
             if it.get("sj_div") != "IS":
                 continue
             name = (it.get("account_nm") or "").strip()
-            field = "revenue" if name in REVENUE_NAMES else "op" if name in OP_NAMES else None
+            field = "revenue" if name in REVENUE_NAMES else "op" if name in OP_NAMES else "ni" if NI_RE.match(name) else None
             if field and field not in by_fs[it["corp_code"]][it.get("fs_div")]:
                 by_fs[it["corp_code"]][it.get("fs_div")][field] = it
         for code, fs in by_fs.items():
-            pick = fs.get("CFS") if len(fs.get("CFS", {})) == 2 else fs.get("OFS")
-            if pick and len(pick) == 2:
+            # 매출액·영업이익은 꼭 있어야 함 (순이익은 없으면 빈 값)
+            full = lambda f: f is not None and "revenue" in f and "op" in f
+            pick = fs.get("CFS") if full(fs.get("CFS")) else fs.get("OFS")
+            if full(pick):
                 out[code] = {**pick, "fs": "CFS" if pick is fs.get("CFS") else "OFS"}
     return out
 
@@ -142,7 +148,7 @@ def _growth(now: float | None, prev: float | None) -> tuple[float | None, str | 
 
 
 def periodic(key: str, start: dt.date, done: set[str], end: dt.date | None = None) -> list[dict]:
-    """분기·반기·사업보고서 최초 제출본 → 해당 분기(3개월) 매출액·영업이익과 전년 동기"""
+    """분기·반기·사업보고서 최초 제출본 → 해당 분기(3개월) 매출액·영업이익·당기순이익과 전년 동기"""
     filings = []
     day = start
     while day <= (end or dt.date.today()):
@@ -169,12 +175,12 @@ def periodic(key: str, start: dt.date, done: set[str], end: dt.date | None = Non
         if not v:
             continue
         # 한 번에 올리는 행들은 칸 구성이 같아야 함(PostgREST). 정기보고서엔 직전 분기 값이 없음
-        row = {"revenue_prev_q": None, "revenue_qoq": None, "op_prev_q": None, "op_qoq": None}
-        for f in ("revenue", "op"):
-            now, prev = _amount(v[f].get("thstrm_amount")), _amount(v[f].get("frmtrm_amount"))
+        row = {"revenue_prev_q": None, "revenue_qoq": None, "op_prev_q": None, "op_qoq": None, "ni_prev_q": None, "ni_qoq": None}
+        for f in ("revenue", "op", "ni"):
+            now, prev = _amount(v.get(f, {}).get("thstrm_amount")), _amount(v.get(f, {}).get("frmtrm_amount"))
             if code == "11011":
                 c = cum3.get(year, {}).get(d["corp_code"])
-                if not c or c["fs"] != v["fs"]:
+                if not c or c["fs"] != v["fs"] or f not in c:
                     now = prev = None
                 else:
                     a, b = _amount(c[f].get("thstrm_add_amount")), _amount(c[f].get("frmtrm_add_amount"))
@@ -205,12 +211,19 @@ def periodic(key: str, start: dt.date, done: set[str], end: dt.date | None = Non
     return rows
 
 
-def collect(start: dt.date) -> None:
+def collect(start: dt.date, refill_ni: bool = False) -> None:
+    """refill_ni: 순이익 칸이 생기기 전에 저장한 공시를 다시 읽음 (한 번만 수동 실행)"""
     key = os.environ.get("DART_API_KEY")
     if not key:
         print("DART_API_KEY 없음, 실적 스크리닝 건너뜀")
         return
-    done = {r["id"] for r in db.select("earnings_screen", f"select=id&date=gte.{start.isoformat()}")} if db.URL else set()
+    cond = "&ni=not.is.null" if refill_ni else ""
+    done: set[str] = set()
+    for off in range(0, 100_000, 1000) if db.URL else []:  # 한 번에 1000행까지만 돌려줌
+        page = db.select("earnings_screen", f"select=id&date=gte.{start.isoformat()}{cond}&order=id&limit=1000&offset={off}")
+        done |= {r["id"] for r in page}
+        if len(page) < 1000:
+            break
     rows, skipped = [], 0
     day = start
     while day <= dt.date.today():

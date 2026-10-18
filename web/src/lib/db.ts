@@ -238,6 +238,12 @@ export type EarningsRow = {
   op_prev_y: number | null;
   op_yoy: number | null;
   op_turn: string | null;
+  ni: number | null;
+  ni_prev_q: number | null;
+  ni_qoq: number | null;
+  ni_prev_y: number | null;
+  ni_yoy: number | null;
+  ni_turn: string | null;
   note: string | null;
   note_updated_at: string | null;
 };

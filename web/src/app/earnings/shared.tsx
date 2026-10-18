@@ -52,3 +52,25 @@ export function MarketTabs({ us }: { us: boolean }) {
     </div>
   );
 }
+
+type Growth = {
+  revenue: number | null; revenue_prev_y: number | null; revenue_yoy: number | null;
+  op: number | null; op_prev_y: number | null; op_yoy: number | null; op_turn: string | null;
+  ni: number | null; ni_prev_y: number | null; ni_yoy: number | null; ni_turn: string | null;
+};
+
+// 항목별 판정: 전년 동기 대비 증가(흑자전환 포함) / 판단 불가(값이 없음) / 미달
+function judge(now: number | null, prev: number | null, yoy: number | null, turn: string | null, min: number) {
+  if (now == null || prev == null) return "none";
+  return (yoy != null && yoy > min) || (turn ?? "").includes("흑자") ? "up" : "fail";
+}
+
+// 매출·영업이익·당기순이익이 모두 늘어난 곳. 없는 항목이 있으면 나머지 둘만으로 판단 (두 항목 이상 필요)
+export function allGrow(r: Growth, min: number) {
+  const j = [
+    judge(r.revenue, r.revenue_prev_y, r.revenue_yoy, null, min),
+    judge(r.op, r.op_prev_y, r.op_yoy, r.op_turn, min),
+    judge(r.ni, r.ni_prev_y, r.ni_yoy, r.ni_turn, min),
+  ];
+  return !j.includes("fail") && j.filter((x) => x === "up").length >= 2;
+}

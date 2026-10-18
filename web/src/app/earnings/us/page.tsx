@@ -5,7 +5,7 @@ import { SetupNotice } from "@/components/SetupNotice";
 import type { UsEarningsRow } from "@/lib/db";
 import { num } from "@/lib/format";
 import { countUsEarnings, daysAgo, getUsEarnings, getWatchItems } from "@/lib/queries";
-import { chip, MarketTabs, Pct, qLabel, qSeason, recentQuarters } from "../shared";
+import { allGrow, chip, MarketTabs, Pct, qLabel, qSeason, recentQuarters } from "../shared";
 
 const VIEWS = { grow: "동반 성장", all: "전체", memo: "메모" } as const;
 const MINS = { "0": "0%↑", "10": "10%↑", "30": "30%↑" } as const;
@@ -15,22 +15,7 @@ const SORTS = { date: "최신순", op: "영업이익 YoY순", rev: "매출 규�
 type Params = { q: string; view: keyof typeof VIEWS; min: keyof typeof MINS; size: keyof typeof SIZES; sort: keyof typeof SORTS };
 const DEFAULTS: Params = { q: "", view: "grow", min: "0", size: "100", sort: "date" };
 
-// 항목별 판정: 전년 동기 대비 증가(흑자전환 포함) / 판단 불가(값이 없음) / 미달
-function judge(now: number | null, prev: number | null, yoy: number | null, turn: string | null, min: number) {
-  if (now == null || prev == null) return "none";
-  return (yoy != null && yoy > min) || (turn ?? "").includes("흑자") ? "up" : "fail";
-}
-
-// 매출·영업이익·당기순이익이 모두 늘어난 곳. 없는 항목이 있으면 나머지 둘만으로 판단 (두 항목 이상 필요)
-function grows(r: UsEarningsRow, p: Params) {
-  const min = Number(p.min);
-  const j = [
-    judge(r.revenue, r.revenue_prev_y, r.revenue_yoy, null, min),
-    judge(r.op, r.op_prev_y, r.op_yoy, r.op_turn, min),
-    judge(r.ni, r.ni_prev_y, r.ni_yoy, r.ni_turn, min),
-  ];
-  return !j.includes("fail") && j.filter((x) => x === "up").length >= 2;
-}
+const grows = (r: UsEarningsRow, p: Params) => allGrow(r, Number(p.min));
 
 // 백만 달러 → 억 달러
 const usd = (v: number | null) => (v == null ? "-" : `${num(v / 100, Math.abs(v) < 1000 ? 1 : 0)}억$`);
