@@ -46,3 +46,11 @@ def delete(table: str, query: str) -> None:
         return
     r = requests.delete(f"{URL}/rest/v1/{table}?{query}", headers=_headers(), timeout=30)
     r.raise_for_status()
+
+
+def update(table: str, query: str, patch: dict) -> None:
+    if not URL:
+        print(f"[dry-run] {table} 수정: {query} {patch}")
+        return
+    r = requests.patch(f"{URL}/rest/v1/{table}?{query}", headers=_headers(), data=json.dumps(patch, ensure_ascii=False).encode(), timeout=30)
+    r.raise_for_status()
