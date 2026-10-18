@@ -11,7 +11,7 @@ import requests
 
 import db
 
-THRESHOLD = {"KR": 50.0, "US": 30.0}  # 상승여력 기준(%)
+THRESHOLD = {"KR": 100.0, "US": 50.0}  # 상승여력 기준(%)
 RESET_GAP = 5.0  # 기준보다 5%p 아래로 내려가면 다시 알릴 수 있게 초기화 (기준 근처에서 오르내릴 때 알림 반복 방지)
 SITE = os.environ.get("SITE_URL", "https://invest-dashboard-wheat-sigma.vercel.app")
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36"}
