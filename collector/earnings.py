@@ -61,7 +61,9 @@ def parse(doc: str) -> dict | None:
                 out[key + "_prev_y"] = _num(v[4])
                 out[key + "_yoy"] = _num(v[5])
                 out[key + "_turn"] = v[6] if v[6] not in ("", "-") else None
-    if "revenue" not in out or "op" not in out:
+    # 월별 매출만 내는 공시(유통사 등)나 판매 실적처럼 숫자가 비면 분기 실적이 아님.
+    # 저장하면 같은 분기의 진짜 잠정실적보다 먼저 나온 공시로 잡혀 가려짐
+    if out.get("revenue") is None or out.get("op") is None:
         return None
     if scale is None:
         return None
@@ -260,3 +262,5 @@ def collect(start: dt.date, refill_ni: bool = False) -> None:
     print(f"실적 스크리닝: 잠정실적 {len(rows)}건 저장, 표를 못 읽은 공시 {skipped}건")
     db.upsert("earnings_screen", periodic(key, start, done))
     db.delete("earnings_screen", f"date=lt.{(dt.date.today() - dt.timedelta(days=KEEP_DAYS)).isoformat()}")
+    # 위 기준이 생기기 전에 저장된 빈 공시 정리 (메모를 단 건 남김)
+    db.delete("earnings_screen", "or=(revenue.is.null,op.is.null)&note=is.null")
