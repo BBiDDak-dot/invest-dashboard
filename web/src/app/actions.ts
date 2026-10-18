@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AUTH_COOKIE, authToken } from "@/lib/auth";
 import { insert, remove, select, storage, update, type Security, type WatchItem } from "@/lib/db";
-import { getWatchItems } from "@/lib/queries";
+import { writeEarningsReport, reportInput } from "@/lib/earningsReport";
+import { getEarningsTarget, getWatchItems } from "@/lib/queries";
 import { summarizeReports, summarizeVideo } from "@/lib/summarize";
 import { fetchYearPrices } from "@/lib/yahoo";
 
@@ -217,6 +218,24 @@ export async function saveUsEarningsNote(id: string, note: string): Promise<Acti
     return text ? "저장됨" : "메모 삭제됨";
   });
   if (!state?.error) revalidatePath("/earnings/us");
+  return state;
+}
+
+// 실적 스크리닝 종목을 누르면 보는 실적 상승 분석 리포트 (Gemini + 구글 검색). 있으면 새로 써서 바꿈
+export async function generateEarningsReport(key: string): Promise<ActionState> {
+  const state = await run(async () => {
+    const target = await getEarningsTarget(key);
+    if (!target) throw new Error("실적 공시를 찾지 못함");
+    const input = reportInput(target);
+    const { body, model } = await writeEarningsReport(input);
+    await insert(
+      "earnings_reports",
+      { id: key, market: input.market, name: input.name, period: target.kr?.period ?? target.us?.period, body, model, created_at: new Date().toISOString() },
+      { upsert: true },
+    );
+    return "작성됨";
+  });
+  if (!state?.error) revalidatePath(`/earnings/r/${key}`);
   return state;
 }
 

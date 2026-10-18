@@ -4,8 +4,8 @@ import { EarningsNote } from "@/components/EarningsNote";
 import { SetupNotice } from "@/components/SetupNotice";
 import type { UsEarningsRow } from "@/lib/db";
 import { num } from "@/lib/format";
-import { countUsEarnings, daysAgo, getUsEarnings, getWatchItems } from "@/lib/queries";
-import { allGrow, chip, MarketTabs, Pct, qLabel, qSeason, recentQuarters } from "../shared";
+import { countUsEarnings, daysAgo, getEarningsReportKeys, getUsEarnings, getWatchItems } from "@/lib/queries";
+import { allGrow, chip, ReportLink, reportHref, MarketTabs, Pct, qLabel, qSeason, recentQuarters } from "../shared";
 
 const VIEWS = { grow: "동반 성장", all: "전체", memo: "메모" } as const;
 const MINS = { "0": "0%↑", "10": "10%↑", "30": "30%↑" } as const;
@@ -20,18 +20,18 @@ const grows = (r: UsEarningsRow, p: Params) => allGrow(r, Number(p.min));
 // 백만 달러 → 억 달러
 const usd = (v: number | null) => (v == null ? "-" : `${num(v / 100, Math.abs(v) < 1000 ? 1 : 0)}억$`);
 
-function Item({ r, watch }: { r: UsEarningsRow; watch: Set<string> }) {
+function Item({ r, watch, reports }: { r: UsEarningsRow; watch: Set<string>; reports: Set<string> }) {
+  const href = reportHref(true, r.id);
   const opm = r.revenue && r.op != null ? (r.op / r.revenue) * 100 : null;
   return (
     <li className="py-3">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        {watch.has(r.ticker) ? (
-          <Link href={`/stocks/${r.ticker}`} className="font-medium hover:underline">
-            <span className="text-amber-500">★</span> {r.name}
+        {watch.has(r.ticker) && (
+          <Link href={`/stocks/${r.ticker}`} className="text-amber-500" title="관심종목 화면">
+            ★
           </Link>
-        ) : (
-          <span className="font-medium">{r.name}</span>
         )}
+        <ReportLink href={href} name={r.name} done={reports.has(href.split("/").pop()!)} />
         <span className="text-xs text-zinc-500">
           {r.ticker} · 회계분기 말 {r.end_date ?? "-"} · {r.derived_q4 ? "연간-3분기 계산" : (r.form ?? "보고서")} {r.filed ?? ""}
         </span>
@@ -75,7 +75,7 @@ export default async function UsEarningsPage({ searchParams }: PageProps<"/earni
     if (typeof v === "string" && v in opts) (p as Record<string, string>)[k] = v;
   }
   const quarters = recentQuarters(daysAgo(0), 5);
-  const [count, watchItems] = await Promise.all([countUsEarnings(quarters, Number(p.size)), getWatchItems()]);
+  const [count, watchItems, reports] = await Promise.all([countUsEarnings(quarters, Number(p.size)), getWatchItems(), getEarningsReportKeys("US")]);
   // 기본은 실적이 있는 가장 최근 분기 (발표 시즌 초반엔 막 시작한 분기 대신 바로 앞 분기)
   p.q = typeof sp.q === "string" && quarters.includes(sp.q) ? sp.q : (quarters.find((q) => (count.get(q) ?? 0) >= 50) ?? quarters[1]);
   const all = await getUsEarnings(p.q);
@@ -117,14 +117,14 @@ export default async function UsEarningsPage({ searchParams }: PageProps<"/earni
         </div>
         <p className="mb-2 text-xs text-zinc-500">
           {qLabel(p.q)} 실적 (통상 {qSeason(p.q, true)} 제출) · {shown.length}개 기업 (실적 {rows.length}개 기업 중)
-          {p.view === "grow" && ` · 분기 매출액·영업이익·당기순이익이 모두 전년 동기 대비 ${p.min}% 넘게 늘어난 곳(이익은 흑자전환 포함, 없는 항목은 빼고 나머지 둘로 판단)`}
+          {p.view === "grow" && ` · 분기 매출액·영업이익·당기순이익이 모두 전년 동기 대비 ${p.min}% 넘게 늘어난 곳 (이익은 흑자전환 포함, 셋 중 하나라도 값이 없으면 제외) · 종목을 누르면 실적 상승 분석 리포트`}
         </p>
         {shown.length === 0 ? (
           <Empty>{all.length === 0 ? "아직 수집된 실적이 없음. 수집기가 평일마다 SEC 데이터를 읽어 옴." : "조건에 맞는 기업이 없음."}</Empty>
         ) : (
           <ul className="divide-y divide-zinc-100 dark:divide-zinc-900">
             {shown.slice(0, 500).map((r) => (
-              <Item key={r.id} r={r} watch={watch} />
+              <Item key={r.id} r={r} watch={watch} reports={reports} />
             ))}
           </ul>
         )}

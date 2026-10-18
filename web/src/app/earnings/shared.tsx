@@ -65,12 +65,22 @@ function judge(now: number | null, prev: number | null, yoy: number | null, turn
   return (yoy != null && yoy > min) || (turn ?? "").includes("흑자") ? "up" : "fail";
 }
 
-// 매출·영업이익·당기순이익이 모두 늘어난 곳. 없는 항목이 있으면 나머지 둘만으로 판단 (두 항목 이상 필요)
+// 매출·영업이익·당기순이익이 셋 다 늘어난 곳만 (값이 없는 항목이 있으면 제외)
 export function allGrow(r: Growth, min: number) {
-  const j = [
-    judge(r.revenue, r.revenue_prev_y, r.revenue_yoy, null, min),
-    judge(r.op, r.op_prev_y, r.op_yoy, r.op_turn, min),
-    judge(r.ni, r.ni_prev_y, r.ni_yoy, r.ni_turn, min),
-  ];
-  return !j.includes("fail") && j.filter((x) => x === "up").length >= 2;
+  return (
+    judge(r.revenue, r.revenue_prev_y, r.revenue_yoy, null, min) === "up" &&
+    judge(r.op, r.op_prev_y, r.op_yoy, r.op_turn, min) === "up" &&
+    judge(r.ni, r.ni_prev_y, r.ni_yoy, r.ni_turn, min) === "up"
+  );
+}
+
+// 종목을 누르면 여는 실적 분석 리포트 주소
+export const reportHref = (us: boolean, id: string) => `/earnings/r/${us ? "us" : "kr"}-${id}`;
+
+export function ReportLink({ href, name, done }: { href: string; name: string; done: boolean }) {
+  return (
+    <Link href={href} className="font-medium hover:underline" title="실적 상승 분석 리포트">
+      {name} <span className={`text-[11px] font-normal ${done ? "text-emerald-600" : "text-zinc-400"}`}>{done ? "리포트 ✓" : "리포트 ›"}</span>
+    </Link>
+  );
 }

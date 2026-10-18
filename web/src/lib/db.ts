@@ -273,6 +273,16 @@ export type UsEarningsRow = {
   note: string | null;
 };
 
+export type EarningsReport = {
+  id: string; // kr-접수번호 / us-cik-분기
+  market: "KR" | "US";
+  name: string;
+  period: string | null;
+  body: string;
+  model: string | null;
+  created_at: string;
+};
+
 export type Report = {
   id: string;
   created_at: string;

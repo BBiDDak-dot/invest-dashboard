@@ -160,7 +160,7 @@ export async function summarizeVideo(url: string) {
   throw friendly(lastError);
 }
 
-function friendly(e: unknown): Error {
+export function friendly(e: unknown): Error {
   if (e instanceof ApiError) {
     if (e.status === 429) return new Error("Gemini 무료 한도 초과, 잠시 후 다시 시도");
     if (e.status === 503) return new Error("Gemini 서버가 붐벼서 모든 모델이 거절함 (일시적). 몇 분 뒤 다시 시도");

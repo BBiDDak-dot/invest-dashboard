@@ -4,6 +4,7 @@ import {
   select,
   selectAll,
   type Disclosure,
+  type EarningsReport,
   type EarningsRow,
   type UsEarningsRow,
   type Financial,
@@ -195,6 +196,34 @@ export async function getUsEarnings(period: string): Promise<UsEarningsRow[]> {
 export async function countUsEarnings(periods: string[], minRevenue: number): Promise<Map<string, number>> {
   const n = await Promise.all(periods.map((p) => count("us_earnings", `select=id&period=eq.${p}&revenue=gte.${minRevenue}`)));
   return new Map(periods.map((p, i) => [p, n[i]]));
+}
+
+// 실적 분석 리포트. 주소의 키: kr-DART 접수번호 / us-cik-분기
+export const EARNINGS_KEY = /^(kr-\d{14}|us-\d{1,10}-\d{4}\.[1-4]Q)$/;
+
+export async function getEarningsTarget(key: string): Promise<{ kr?: EarningsRow; us?: UsEarningsRow } | undefined> {
+  if (!EARNINGS_KEY.test(key)) return undefined;
+  const id = key.slice(3);
+  if (key.startsWith("kr-")) {
+    const r = (await select<EarningsRow>("earnings_screen", `select=*&id=eq.${id}`))[0];
+    return r && { kr: r };
+  }
+  const r = (await select<UsEarningsRow>("us_earnings", `select=*&id=eq.${id}`))[0];
+  return r && { us: r };
+}
+
+export async function getEarningsReport(key: string): Promise<EarningsReport | undefined> {
+  if (!EARNINGS_KEY.test(key)) return undefined;
+  return (await select<EarningsReport>("earnings_reports", `select=*&id=eq.${key}`))[0];
+}
+
+// 리포트가 이미 있는 종목 (목록에 표시). 테이블이 아직 없으면(014 SQL 전) 빈 목록
+export async function getEarningsReportKeys(market: "KR" | "US"): Promise<Set<string>> {
+  try {
+    return new Set((await selectAll<{ id: string }>("earnings_reports", `select=id&market=eq.${market}`)).map((r) => r.id));
+  } catch {
+    return new Set();
+  }
 }
 
 export async function getReports(limit = 60): Promise<Omit<Report, "summary">[]> {

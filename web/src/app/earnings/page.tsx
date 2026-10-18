@@ -4,8 +4,8 @@ import { EarningsNote } from "@/components/EarningsNote";
 import { SetupNotice } from "@/components/SetupNotice";
 import type { EarningsRow } from "@/lib/db";
 import { num } from "@/lib/format";
-import { daysAgo, getEarnings, getWatchItems } from "@/lib/queries";
-import { allGrow, chip, MarketTabs, Pct, qLabel, qSeason, recentQuarters } from "./shared";
+import { daysAgo, getEarnings, getEarningsReportKeys, getWatchItems } from "@/lib/queries";
+import { allGrow, chip, ReportLink, reportHref, MarketTabs, Pct, qLabel, qSeason, recentQuarters } from "./shared";
 
 const VIEWS = { grow: "동반 성장", all: "전체", memo: "메모" } as const;
 const MINS = { "0": "0%↑", "10": "10%↑", "30": "30%↑" } as const;
@@ -30,21 +30,21 @@ function firstDisclosures(rows: EarningsRow[]) {
 // 공시 종류: 잠정실적 / 분기보고서 / 반기보고서 / 사업보고서
 const kind = (title: string) => (title.includes("잠정") ? "잠정실적" : (title.match(/분기보고서|반기보고서|사업보고서/)?.[0] ?? "공시"));
 
-// 기준: 분기 실적의 전년 동기 대비(YoY). 매출액·영업이익·당기순이익 모두 증가(흑자전환 포함)
+// 기준: 분기 실적의 전년 동기 대비(YoY). 매출액·영업이익·당기순이익 셋 다 증가(흑자전환 포함)
 const grows = (r: EarningsRow, p: Params) => allGrow(r, Number(p.min));
 
-function Item({ r, watch }: { r: EarningsRow; watch: Set<string> }) {
+function Item({ r, watch, reports }: { r: EarningsRow; watch: Set<string>; reports: Set<string> }) {
+  const href = reportHref(false, r.id);
   const opm = r.revenue && r.op != null ? (r.op / r.revenue) * 100 : null;
   return (
     <li className="py-3">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        {r.stock_code && watch.has(r.stock_code) ? (
-          <Link href={`/stocks/${r.stock_code}`} className="font-medium hover:underline">
-            <span className="text-amber-500">★</span> {r.corp_name}
+        {r.stock_code && watch.has(r.stock_code) && (
+          <Link href={`/stocks/${r.stock_code}`} className="text-amber-500" title="관심종목 화면">
+            ★
           </Link>
-        ) : (
-          <span className="font-medium">{r.corp_name}</span>
         )}
+        <ReportLink href={href} name={r.corp_name} done={reports.has(href.split("/").pop()!)} />
         <span className="text-xs text-zinc-500">
           {r.market} · {r.period ?? "-"} · {r.consolidated ? "연결" : "별도"} · {kind(r.title)} {r.date}
         </span>
@@ -87,7 +87,7 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
   }
   const quarters = recentQuarters(daysAgo(0), 5);
   // 다섯 분기 전 실적 발표가 시작된 시점부터 읽으면 됨 (정정 공시가 늦게 나와도 최초 공시만 쓰므로 충분)
-  const [all, watchItems] = await Promise.all([getEarnings(5 * 92 + 31), getWatchItems()]);
+  const [all, watchItems, reports] = await Promise.all([getEarnings(5 * 92 + 31), getWatchItems(), getEarningsReportKeys("KR")]);
   const watch = new Set(watchItems.filter((w) => w.market === "KR").map((w) => w.ticker));
   const firsts = firstDisclosures(all);
   const count = new Map<string, number>();
@@ -129,7 +129,7 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
         </div>
         <p className="mb-2 text-xs text-zinc-500">
           {qLabel(p.q)} 실적 (통상 {qSeason(p.q)} 발표) · {shown.length}개 기업 (실적 공시 {rows.length}개 기업 중)
-          {p.view === "grow" && ` · 분기 매출액·영업이익·당기순이익이 모두 전년 동기 대비 ${p.min}% 넘게 늘어난 곳 (흑자전환 포함, 없는 항목은 나머지 둘로 판단)`}
+          {p.view === "grow" && ` · 분기 매출액·영업이익·당기순이익이 모두 전년 동기 대비 ${p.min}% 넘게 늘어난 곳 (이익은 흑자전환 포함, 셋 중 하나라도 값이 없으면 제외) · 종목을 누르면 실적 상승 분석 리포트`}
         </p>
         {shown.length === 0 ? (
           <Empty>
@@ -138,7 +138,7 @@ export default async function EarningsPage({ searchParams }: PageProps<"/earning
         ) : (
           <ul className="divide-y divide-zinc-100 dark:divide-zinc-900">
             {shown.map((r) => (
-              <Item key={r.id} r={r} watch={watch} />
+              <Item key={r.id} r={r} watch={watch} reports={reports} />
             ))}
           </ul>
         )}
