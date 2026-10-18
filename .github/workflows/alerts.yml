@@ -1,0 +1,26 @@
+name: alerts
+
+on:
+  schedule:
+    - cron: "*/30 0-6 * * 1-5"    # 09:00~15:30 KST 국내장
+    - cron: "*/30 13-20 * * 1-5"  # 미국장 (서머타임 22:30~05:00 KST 포함)
+  workflow_dispatch:
+
+jobs:
+  alerts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: collector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - run: python alerts.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
