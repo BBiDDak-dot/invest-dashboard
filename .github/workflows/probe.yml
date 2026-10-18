@@ -3,20 +3,9 @@ on: push
 jobs:
   p:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    defaults:
-      run:
-        working-directory: collector
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install -q -r requirements.txt
-      - run: cd .. && python collector/../probe_migrate.py
-      - run: python -c "import datetime as dt, earnings; earnings.collect(dt.date.today() - dt.timedelta(days=120), refill_ni=True)"
-      - run: python -c "import us_earnings; us_earnings.collect()"
-    env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-      DART_API_KEY: ${{ secrets.DART_API_KEY }}
+      - run: pip install -q requests && python probe_migrate.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
