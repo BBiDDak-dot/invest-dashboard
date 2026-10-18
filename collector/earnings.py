@@ -116,11 +116,16 @@ def _multi(key: str, corp_codes: list[str], year: int, reprt_code: str, deadline
     for i in range(0, len(corp_codes), 100):
         if time.time() > deadline:
             break
-        r = requests.get(
-            f"{DART}/fnlttMultiAcnt.json",
-            params={"crtfc_key": key, "corp_code": ",".join(corp_codes[i : i + 100]), "bsns_year": str(year), "reprt_code": reprt_code},
-            timeout=(10, 120),
-        ).json()
+        try:
+            r = requests.get(
+                f"{DART}/fnlttMultiAcnt.json",
+                params={"crtfc_key": key, "corp_code": ",".join(corp_codes[i : i + 100]), "bsns_year": str(year), "reprt_code": reprt_code},
+                timeout=(10, 120),
+            ).json()
+        except (requests.RequestException, ValueError) as e:
+            # 점검 시간(주말 등)엔 JSON 대신 안내 페이지가 옴. 못 읽은 회사는 다음 수집 때 다시 읽음
+            print(f"[실적] 다중회사 조회 실패, 이번엔 건너뜀: {e}")
+            break
         by_fs: dict[str, dict[str, dict]] = defaultdict(lambda: defaultdict(dict))
         for it in r.get("list", []):
             if it.get("sj_div") != "IS":
