@@ -10,6 +10,17 @@ export function GenerateReport({ id, auto }: { id: string; auto: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const started = useRef(false);
+  const [sec, setSec] = useState(0);
+
+  // 오래 걸릴 때 멈춘 건지 알 수 있게 지난 시간 표시
+  useEffect(() => {
+    if (!pending) return;
+    const t = setInterval(() => setSec((s) => s + 1), 1000);
+    return () => {
+      clearInterval(t);
+      setSec(0);
+    };
+  }, [pending]);
 
   const run = () =>
     start(async () => {
@@ -32,7 +43,7 @@ export function GenerateReport({ id, auto }: { id: string; auto: boolean }) {
   }, [auto]);
 
   if (pending)
-    return <p className="text-sm text-zinc-500">Gemini가 실적 발표·기사를 찾아 리포트를 쓰는 중임 (보통 30초~2분)…</p>;
+    return <p className="text-sm text-zinc-500">Gemini가 실적 발표·기사를 찾아 리포트를 쓰는 중임 (보통 30초~2분, {sec}초 지남)…</p>;
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm">
       {error && <span className="text-red-600">{error}</span>}

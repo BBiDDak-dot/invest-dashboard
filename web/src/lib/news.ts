@@ -96,7 +96,7 @@ export async function getArticle(id: string): Promise<Article | null> {
   if (!isArticleId(id)) return null;
   const [oid, aid] = id.split("-");
   const url = `https://n.news.naver.com/mnews/article/${oid}/${aid}`;
-  const r = await fetch(url, { headers: HEADERS, next: { revalidate: 86400 } });
+  const r = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(15_000), next: { revalidate: 86400 } });
   if (!r.ok) throw new Error(`${r.status}`);
   const html = await r.text();
   const body = html.match(/<article[^>]*id="dic_area"[^>]*>([\s\S]*?)<\/article>/)?.[1];

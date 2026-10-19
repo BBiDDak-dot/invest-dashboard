@@ -106,26 +106,57 @@ const ymd = (s: string) => new Date(`${s.slice(0, 10)}T00:00:00Z`).getTime();
 // 국내: 네이버 뉴스 검색("회사명" N분기 실적)에서 네이버뉴스로 볼 수 있는 기사 최대 6건.
 // 검색 결과엔 다른 회사·시황 기사도 섞여서, 15건을 읽고 제목에 회사명과 실적 낱말이 든 기사부터 씀.
 // 먼저 공시일 직후 며칠만 찾고, 모자라면 3주로 넓힘
+// 네이버 검색은 브라우저 머리글이 모자라면 403을 줌(2026-10 확인)
 const BROWSER = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
-  "Accept-Language": "ko-KR,ko;q=0.9",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+  "sec-ch-ua": '"Chromium";v="140", "Not=A?Brand";v="24"',
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": '"Windows"',
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Site": "none",
+  "Upgrade-Insecure-Requests": "1",
 };
+// 자료 하나가 늦어도 전체가 멈추지 않게
+const WAIT = () => AbortSignal.timeout(10_000);
 const dots = (t: number) => new Date(t).toISOString().slice(0, 10).replace(/-/g, ".");
 
 async function naverSearch(q: string, from: number, to: number) {
   const d = (t: number) => dots(t).replace(/\./g, "");
   const url = `https://search.naver.com/search.naver?where=news&sort=0&query=${encodeURIComponent(q)}&ds=${dots(from)}&de=${dots(to)}&nso=so:r,p:from${d(from)}to${d(to)}`;
-  const r = await fetch(url, { headers: BROWSER, next: { revalidate: 3600 } }).catch(() => null);
+  const r = await fetch(url, { headers: BROWSER, signal: WAIT(), next: { revalidate: 3600 } }).catch(() => null);
   if (!r?.ok) return [];
   return [...new Set([...(await r.text()).matchAll(/n\.news\.naver\.com\/mnews\/article\/(\d{3})\/(\d{10})/g)].map((m) => `${m[1]}-${m[2]}`))].slice(0, 15);
 }
 
-async function krDocs(name: string, period: string, date: string): Promise<Doc[]> {
+// 검색이 막히거나 비면 네이버 증권 종목 뉴스(모바일 API)에서 그 무렵 기사로 보충
+async function stockNews(code: string, from: number, to: number) {
+  if (!/^\d{6}$/.test(code)) return [];
+  const r = await fetch(`https://m.stock.naver.com/api/news/stock/${code}?pageSize=50&page=1`, { headers: { "User-Agent": BROWSER["User-Agent"] }, signal: WAIT(), next: { revalidate: 3600 } }).catch(() => null);
+  if (!r?.ok) return [];
+  const pages = (await r.json().catch(() => [])) as { items?: { officeId: string; articleId: string; datetime: string }[] }[];
+  return pages
+    .flatMap((p) => p.items ?? [])
+    .filter((it) => {
+      const t = ymd(`${it.datetime.slice(0, 4)}-${it.datetime.slice(4, 6)}-${it.datetime.slice(6, 8)}`);
+      return t >= from && t <= to;
+    })
+    .map((it) => `${it.officeId}-${it.articleId}`)
+    .slice(0, 15);
+}
+
+async function krDocs(name: string, code: string, period: string, date: string): Promise<Doc[]> {
   const q = `"${name}" ${period.match(/\.([1-4])Q/)?.[1] ?? ""}분기 실적`;
   const seen = new Set<string>();
   const out: (Doc & { score: number })[] = [];
   for (const days of [4, 20]) {
-    const ids = (await naverSearch(q, ymd(date) - DAY, Math.min(ymd(date) + days * DAY, Date.now()))).filter((id) => !seen.has(id) && !!seen.add(id));
+    const from = ymd(date) - DAY;
+    const to = Math.min(ymd(date) + days * DAY, Date.now());
+    let found = await naverSearch(q, from, to);
+    if (found.length === 0) found = await stockNews(code, from, to);
+    const ids = found.filter((id) => !seen.has(id) && !!seen.add(id));
     const docs = await Promise.all(
       ids.map(async (id) => {
         const a = await getArticle(id).catch(() => null);
@@ -147,7 +178,7 @@ async function krDocs(name: string, period: string, date: string): Promise<Doc[]
 // ---------- 미국: SEC ----------
 const SEC_HEADERS = { "User-Agent": "invest-dashboard admin@example.com" }; // SEC는 연락처가 담긴 UA를 요구함
 async function sec(url: string) {
-  const r = await fetch(url, { headers: SEC_HEADERS, next: { revalidate: 86400 } });
+  const r = await fetch(url, { headers: SEC_HEADERS, signal: AbortSignal.timeout(20_000), next: { revalidate: 86400 } });
   if (!r.ok) throw new Error(`SEC ${r.status}`);
   return r;
 }
@@ -218,7 +249,7 @@ async function usDocs(cik: number, accn: string | undefined, date: string): Prom
 
 export async function writeEarningsReport(input: ReportInput) {
   if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY가 설정되지 않음 (Vercel 환경변수에 추가 필요)");
-  const docs = input.market === "KR" ? await krDocs(input.name, input.period, input.date) : await usDocs(input.cik!, input.accn, input.date);
+  const docs = input.market === "KR" ? await krDocs(input.name, input.ticker, input.period, input.date) : await usDocs(input.cik!, input.accn, input.date);
   if (docs.length === 0)
     throw new Error(input.market === "KR" ? "공시일 앞뒤로 이 종목의 실적 기사를 찾지 못함" : "SEC에서 실적 보도자료·보고서를 찾지 못함");
 
