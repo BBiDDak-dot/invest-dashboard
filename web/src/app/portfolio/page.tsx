@@ -4,9 +4,11 @@ import { AutoRefresh } from "@/components/AutoRefresh";
 import { SetupNotice } from "@/components/SetupNotice";
 import { EditCell, StarButton } from "@/components/EditCell";
 import { Sparkline } from "@/components/Sparkline";
-import { changeColor, num, pct } from "@/lib/format";
+import { changeColor, kstToday, num, pct } from "@/lib/format";
 import { StockSearch } from "@/components/StockSearch";
-import { getPortfolio, type Holding, type WatchRow } from "@/lib/queries";
+import { getPortfolio, getTrades, type Holding, type WatchRow } from "@/lib/queries";
+import { buildLedger } from "@/lib/trades";
+import { TradeForm } from "@/components/TradeForm";
 import { CashForm, HoldingForm } from "./HoldingForms";
 
 const th = "px-2 py-2 font-normal whitespace-nowrap";
@@ -60,7 +62,7 @@ function WeightCell({ weight, max }: { weight: number | null; max: number }) {
   );
 }
 
-function Rows({ label, rows, total, max }: { label: string; rows: Holding[]; total: number; max: number }) {
+function Rows({ label, rows, total, max, journaled }: { label: string; rows: Holding[]; total: number; max: number; journaled: Set<string> }) {
   if (rows.length === 0) return null;
   const s = summarize(rows, total);
   return (
@@ -89,15 +91,23 @@ function Rows({ label, rows, total, max }: { label: string; rows: Holding[]; tot
               </Link>
             </td>
             <td className={td}>
-              <EditCell ticker={h.ticker} field="avg_price" value={h.avg_price} kind="num">
-                {num(h.avg_price)}
-              </EditCell>
+              {journaled.has(h.ticker) ? (
+                <span title="매매 일지로 계산됨">{num(h.avg_price)}</span>
+              ) : (
+                <EditCell ticker={h.ticker} field="avg_price" value={h.avg_price} kind="num">
+                  {num(h.avg_price)}
+                </EditCell>
+              )}
             </td>
             <td className={td}>{num(h.latest?.close)}</td>
             <td className={td}>
-              <EditCell ticker={h.ticker} field="quantity" value={h.quantity} kind="num">
-                {num(h.quantity, 4)}
-              </EditCell>
+              {journaled.has(h.ticker) ? (
+                <span title="매매 일지로 계산됨">{num(h.quantity, 4)}</span>
+              ) : (
+                <EditCell ticker={h.ticker} field="quantity" value={h.quantity} kind="num">
+                  {num(h.quantity, 4)}
+                </EditCell>
+              )}
             </td>
             <td className={td}>{num(h.evalKrw, 0)}</td>
             <td className={`${td} ${changeColor(h.pnlKrw)}`}>{signedWon(h.pnlKrw)}</td>
@@ -234,7 +244,14 @@ function Candidates({ rows }: { rows: WatchRow[] }) {
 }
 
 export default async function PortfolioPage() {
-  const { rows, holdings, cash, fx, total } = await getPortfolio();
+  const [{ rows, holdings, cash, fx, total }, trades] = await Promise.all([getPortfolio(), getTrades()]);
+  const journaled = new Set(trades.map((t) => t.ticker));
+  const { realized } = buildLedger(trades, fx?.value ?? null);
+  const year = kstToday().slice(0, 4);
+  const realizedKrw = (pred: (d: string) => boolean) =>
+    trades.reduce((s, t) => s + (pred(t.trade_date) ? (realized.get(t.id)?.pnlKrw ?? 0) : 0), 0);
+  const realizedAll = realizedKrw(() => true);
+  const realizedYear = realizedKrw((d) => d.startsWith(year));
   const held = new Set(holdings.map((h) => h.ticker));
   const candidates = rows.filter((r) => !held.has(r.ticker));
   const kr = holdings.filter((h) => h.market === "KR");
@@ -250,10 +267,13 @@ export default async function PortfolioPage() {
       <AutoRefresh />
       <h1 className="text-lg font-semibold">포트폴리오</h1>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Kpi label="순자산" value={`${num(total, 0)}원`} sub={`주식 ${num(all.evalKrw, 0)} · 현금 ${num(cash, 0)}`} />
         <Kpi label="평가손익" value={`${signedWon(all.pnlKrw)}원`} sub={`매입금액 ${num(all.costKrw, 0)}원`} color={changeColor(all.pnlKrw)} />
         <Kpi label="총수익률" value={pct(all.returnPct)} sub={`국내 ${pct(krSum.returnPct)} · 해외 ${pct(usSum.returnPct)}`} color={changeColor(all.returnPct)} />
+        <Link href="/journal" className="block">
+          <Kpi label="실현손익 (매매 일지)" value={`${signedWon(realizedAll)}원`} sub={`${year}년 ${signedWon(realizedYear)}원`} color={changeColor(realizedAll)} />
+        </Link>
         <Kpi label="원/달러 환율" value={num(fx?.value)} sub={fx ? `${fx.date} 기준` : undefined} />
       </div>
 
@@ -306,8 +326,8 @@ export default async function PortfolioPage() {
               </tr>
             </thead>
             <tbody>
-              <Rows label="국내" rows={kr} total={total} max={maxWeight} />
-              <Rows label="해외" rows={us} total={total} max={maxWeight} />
+              <Rows label="국내" rows={kr} total={total} max={maxWeight} journaled={journaled} />
+              <Rows label="해외" rows={us} total={total} max={maxWeight} journaled={journaled} />
               {holdings.length === 0 && (
                 <tr>
                   <td colSpan={COLS} className="py-4 text-center text-sm text-zinc-500">
@@ -337,16 +357,22 @@ export default async function PortfolioPage() {
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-zinc-500">해외 종목의 매입금액·손익은 현재 환율로 환산함. 섹터·매입단가·수량·목표주가·투자시나리오·매도 시그널은 칸을 누르면 바로 편집됨.</p>
+        <p className="mt-2 text-xs text-zinc-500">해외 종목의 매입금액·손익은 현재 환율로 환산함. 섹터·매입단가·수량·목표주가·투자시나리오·매도 시그널은 칸을 누르면 바로 편집됨. 매매 일지에 기록한 종목의 매입단가·수량은 일지로 계산되어 직접 편집이 막힘.</p>
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="매수 후보 (관심종목 중 미보유, 상승여력 순)">
           <Candidates rows={candidates} />
         </Card>
-        <Card title="보유 종목 입력·수정">
+        <Card title="매매 기록 (매매 일지와 연동)">
           <div className="space-y-4">
-            <HoldingForm options={rows} />
+            <TradeForm options={rows} fx={fx?.value ?? null} today={kstToday()} />
+            <details className="text-sm">
+              <summary className="cursor-pointer text-xs text-zinc-500">일지 없이 매입단가·수량 직접 입력</summary>
+              <div className="mt-2">
+                <HoldingForm options={rows.filter((r) => !journaled.has(r.ticker))} />
+              </div>
+            </details>
             <div>
               <div className="mb-1.5 text-xs text-zinc-500">관심종목에 없는 종목은 여기서 추가하면 양쪽에 같이 들어감</div>
               <StockSearch />
