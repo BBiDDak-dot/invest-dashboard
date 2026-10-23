@@ -21,6 +21,7 @@ import {
 } from "./db";
 
 import { liveFx, liveQuotes } from "./live";
+import type { Trade } from "./trades";
 
 const FX_SERIES = "YF:KRW=X"; // 원/달러 환율 (관심종목 화면 상단에도 표시)
 
@@ -246,6 +247,15 @@ export type Holding = WatchRow & {
 };
 // rows: 관심종목 전체(보유 여부와 무관), holdings: 그중 수량이 있는 종목
 export type Portfolio = { rows: WatchRow[]; holdings: Holding[]; cash: number; fx: MacroObservation | undefined; total: number };
+
+// 매매 일지 (015_trades.sql 실행 전이면 빈 목록)
+export async function getTrades(): Promise<Trade[]> {
+  try {
+    return await selectAll<Trade>("trades", "select=*&order=trade_date.desc,id.desc");
+  } catch {
+    return [];
+  }
+}
 
 export async function getCash(): Promise<number> {
   try {

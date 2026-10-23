@@ -2,11 +2,12 @@ import "server-only";
 import { ApiError, createPartFromUri, FileState, GoogleGenAI, MediaResolution, type Part } from "@google/genai";
 import type { WatchItem } from "./db";
 
-// 무료 한도가 넉넉한 Gemini API(Google AI Studio 키) 사용. Pro가 한도 초과·과부하면 Flash → Flash-Lite 순으로 다시 시도함.
-const MODELS = [process.env.GEMINI_MODEL || "gemini-pro-latest", "gemini-flash-latest", "gemini-flash-lite-latest"];
+// Gemini API(Google AI Studio 키) 사용. 기본은 Gemini 4 Argon, 한도 초과·과부하·미지원이면 Flash → Flash-Lite 순으로 다시 시도함.
+const ARGON = "gemini-4-argon";
+const MODELS = [process.env.GEMINI_MODEL || ARGON, "gemini-flash-latest", "gemini-flash-lite-latest"];
 // 과부하(503)는 보통 잠깐이라 모델마다 잠시 기다렸다 한 번 더 시도함
 const RETRY_WAIT_MS = [0, 4000];
-const MODEL_WAIT_MS = [120_000, 90_000]; // Pro, Flash 순서로 이만큼만 기다리고, 마지막 Flash-Lite는 남은 시간 전부
+const MODEL_WAIT_MS = [120_000, 90_000]; // Argon, Flash 순서로 이만큼만 기다리고, 마지막 Flash-Lite는 남은 시간 전부
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const INLINE_MAX_BYTES = 14 * 1024 * 1024; // base64로 늘어나도 요청 한도(20MB) 안에 드는 크기
 
@@ -84,7 +85,7 @@ export async function summarizeReports(sources: Source[], watch: WatchItem[]) {
     text: `오늘 자료 ${sources.length}건(${sources.map((s) => s.name).join(", ")})을 한 페이지로 요약해 줘.\n\n내 관심종목:\n${watchContext(watch)}`,
   });
 
-  // 붐비는 날엔 Pro·Flash가 응답 없이 몇 분씩 붙잡고 있기도 해서, 모델마다 기다리는 시간을 정하고 넘기면 다음 모델로.
+  // 붐비는 날엔 Argon·Flash가 응답 없이 몇 분씩 붙잡고 있기도 해서, 모델마다 기다리는 시간을 정하고 넘기면 다음 모델로.
   // 전체는 서버 함수 제한(300초) 안에 끝나게 함
   const deadline = Date.now() + 280_000;
   let lastError: unknown;
@@ -107,7 +108,7 @@ export async function summarizeReports(sources: Source[], watch: WatchItem[]) {
         // 과부하(503)는 같은 모델로 한 번 더, 한도 초과(429)는 바로 다음 모델로. 그 밖의 오류는 중단
         if (e instanceof Error && (e.name === "AbortError" || e.name === "TimeoutError")) break;
         if (e instanceof ApiError && e.status === 503) continue;
-        if (e instanceof ApiError && e.status === 429) break;
+        if (e instanceof ApiError && (e.status === 429 || e.status === 404)) break; // 404: 키에서 못 쓰는 모델
         throw friendly(e);
       }
     }
@@ -125,7 +126,9 @@ const VIDEO_PROMPT = `이 투자 영상을 나중에 다른 자료와 함께 한
 - 리스크·반대 논리
 영상에 없는 내용은 쓰지 않음.`;
 // 영상은 소리(말) 위주라 화면은 5초에 한 장, 낮은 해상도로만 봐서 처리 시간을 줄임
-const VIDEO_MODELS = ["gemini-flash-lite-latest", "gemini-flash-latest"]; // 시험해 보니 영상은 Lite가 7~24초, Flash는 붐벼서 3분 넘게 걸리기도 함
+// Argon 먼저. 실패하면 Lite(시험 때 7~24초) → Flash(붐비면 3분 넘게 걸리기도 함)
+const VIDEO_MODELS = [ARGON, "gemini-flash-lite-latest", "gemini-flash-latest"];
+const VIDEO_WAIT_MS = [120_000]; // Argon은 이만큼만 기다리고 다음 모델로
 const VIDEO_DEADLINE_MS = 270_000; // 서버 함수 제한(300초) 안에 오류로라도 끝나게
 
 export async function summarizeVideo(url: string) {
@@ -133,22 +136,25 @@ export async function summarizeVideo(url: string) {
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const deadline = Date.now() + VIDEO_DEADLINE_MS;
   let lastError: unknown;
-  for (const model of VIDEO_MODELS) {
+  for (const [mi, model] of VIDEO_MODELS.entries()) {
     const left = deadline - Date.now();
     if (left < 20_000) break;
     try {
       const res = await ai.models.generateContent({
         model,
         contents: [{ role: "user", parts: [{ fileData: { fileUri: canonicalYoutube(url) }, videoMetadata: { fps: 0.2 } }, { text: VIDEO_PROMPT }] }],
-        config: { mediaResolution: MediaResolution.MEDIA_RESOLUTION_LOW, abortSignal: AbortSignal.timeout(left) },
+        config: { mediaResolution: MediaResolution.MEDIA_RESOLUTION_LOW, abortSignal: AbortSignal.timeout(Math.min(left, VIDEO_WAIT_MS[mi] ?? left)) },
       });
       const text = res.text?.trim();
       if (!text) throw new Error(`영상 메모가 비어 있음 (${res.candidates?.[0]?.finishReason ?? "원인 불명"})`);
       return text;
     } catch (e) {
       lastError = e;
-      if (e instanceof ApiError && (e.status === 503 || e.status === 429 || e.status === 500)) continue;
-      if (e instanceof Error && (e.name === "AbortError" || e.name === "TimeoutError")) break;
+      if (e instanceof ApiError && [404, 429, 500, 503].includes(e.status)) continue;
+      if (e instanceof Error && (e.name === "AbortError" || e.name === "TimeoutError")) {
+        if (mi < VIDEO_WAIT_MS.length) continue; // Argon이 오래 걸리면 Lite로
+        break;
+      }
       throw friendly(e);
     }
   }

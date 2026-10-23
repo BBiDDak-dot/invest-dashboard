@@ -4,9 +4,11 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AUTH_COOKIE, authToken } from "@/lib/auth";
-import { insert, remove, select, storage, update, type Security, type WatchItem } from "@/lib/db";
+import { count, insert, remove, select, storage, update, type Security, type WatchItem } from "@/lib/db";
 import { writeEarningsReport, reportInput } from "@/lib/earningsReport";
-import { getEarningsTarget, getWatchItems } from "@/lib/queries";
+import { getCash, getEarningsTarget, getWatchItems } from "@/lib/queries";
+import { kstToday } from "@/lib/format";
+import { buildLedger, cashDelta, type Trade } from "@/lib/trades";
 import { summarizeReports, summarizeVideo } from "@/lib/summarize";
 import { fetchYearPrices } from "@/lib/yahoo";
 
@@ -113,6 +115,11 @@ export async function updateStock(_: ActionState, form: FormData): Promise<Actio
       avg_price: numOrNull(form.get("avg_price")),
       quantity: numOrNull(form.get("quantity")),
     };
+    // 매매 일지로 관리하는 종목은 매입단가·수량을 일지가 정함
+    if (await hasTrades(ticker)) {
+      delete patch.avg_price;
+      delete patch.quantity;
+    }
     await update("watchlist", `ticker=eq.${encodeURIComponent(ticker)}`, patch);
     revalidatePath("/", "layout");
   });
@@ -131,6 +138,7 @@ export async function updateField(ticker: string, field: EditField, value: strin
       if (v === null && value.replace(/,/g, "").trim() !== "") throw new Error("숫자로 입력할 것");
     } else if ((TEXT_FIELDS as readonly string[]).includes(field)) v = textOrNull(value);
     else throw new Error("편집할 수 없는 칸");
+    if ((field === "avg_price" || field === "quantity") && (await hasTrades(ticker))) throw new Error(JOURNALED);
     await update("watchlist", `ticker=eq.${encodeURIComponent(ticker)}`, { [field]: v });
     revalidatePath("/", "layout");
   });
@@ -148,6 +156,7 @@ export async function saveHolding(_: ActionState, form: FormData): Promise<Actio
   return run(async () => {
     const ticker = String(form.get("ticker") ?? "");
     if (!ticker) throw new Error("종목을 고를 것");
+    if (await hasTrades(ticker)) throw new Error(JOURNALED);
     await update("watchlist", `ticker=eq.${encodeURIComponent(ticker)}`, {
       avg_price: numOrNull(form.get("avg_price")),
       quantity: numOrNull(form.get("quantity")),
@@ -171,6 +180,95 @@ export async function removeStock(ticker: string): Promise<ActionState> {
   if (state?.error) return state;
   revalidatePath("/", "layout");
   redirect("/watchlist");
+}
+
+// ---------- 매매 일지 ----------
+// 매매를 기록·삭제하면 관심종목의 매입단가·보유수량을 일지로 다시 계산하고, 현금도 함께 바꿈
+
+const JOURNALED = "매매 일지로 관리 중인 종목이라 매입단가·수량은 매매 일지에서 기록함";
+
+async function hasTrades(ticker: string) {
+  try {
+    return (await count("trades", `ticker=eq.${encodeURIComponent(ticker)}`)) > 0;
+  } catch {
+    return false; // 015_trades.sql 실행 전
+  }
+}
+
+async function tradesOf(ticker: string) {
+  return select<Trade>("trades", `select=*&ticker=eq.${encodeURIComponent(ticker)}`);
+}
+
+async function syncPosition(ticker: string, trades: Trade[]) {
+  const p = buildLedger(trades).positions.get(ticker) ?? { quantity: 0, avgPrice: null };
+  await update("watchlist", `ticker=eq.${encodeURIComponent(ticker)}`, { quantity: p.quantity, avg_price: p.avgPrice });
+}
+
+async function addCash(delta: number) {
+  if (!delta) return;
+  await insert("settings", { key: "cash_krw", value: Math.round((await getCash()) + delta) }, { upsert: true });
+}
+
+export async function addTrade(_: ActionState, form: FormData): Promise<ActionState> {
+  return run(async () => {
+    const ticker = String(form.get("ticker") ?? "");
+    const side = String(form.get("side") ?? "");
+    const price = numOrNull(form.get("price"));
+    const quantity = numOrNull(form.get("quantity"));
+    const fee = numOrNull(form.get("fee")) ?? 0;
+    const date = String(form.get("trade_date") || kstToday());
+    if (!ticker) throw new Error("종목을 고를 것");
+    if (side !== "buy" && side !== "sell") throw new Error("매수·매도를 고를 것");
+    if (price == null || price < 0) throw new Error("체결 단가를 입력할 것");
+    if (!quantity || quantity <= 0) throw new Error("수량을 입력할 것");
+    if (fee < 0) throw new Error("수수료는 0 이상");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("날짜 형식이 맞지 않음");
+
+    const [item] = await select<WatchItem>("watchlist", `select=*&ticker=eq.${encodeURIComponent(ticker)}`);
+    if (!item) throw new Error("관심종목에 없는 종목");
+    const fx = item.market === "US" ? numOrNull(form.get("fx")) : null;
+    const applyCash = form.get("cash") === "on";
+    if (item.market === "US" && applyCash && !fx) throw new Error("현금에 반영하려면 환율을 입력할 것");
+
+    const existing = await tradesOf(ticker);
+    const base = { ticker, market: item.market, name: item.name };
+    // 일지를 처음 쓰는 종목에 이미 보유분이 있으면 그 수량·단가를 기초 잔고로 먼저 남김
+    const open =
+      existing.length === 0 && (item.quantity ?? 0) > 0
+        ? { ...base, trade_date: date, side: "open", price: item.avg_price ?? 0, quantity: item.quantity, fee: 0, fx: null, cash_applied: false, reason: "일지 시작 전 보유분" }
+        : null;
+    const trade = { ...base, trade_date: date, side, price, quantity, fee, fx, cash_applied: applyCash, reason: textOrNull(form.get("reason")) };
+
+    // 저장 전에 계산해 보유수량보다 많이 파는지 확인
+    const draft = [...existing, ...(open ? [{ ...open, id: 1e15 } as Trade] : []), { ...trade, id: 1e15 + 1 } as Trade];
+    const ledger = buildLedger(draft, fx);
+    if (ledger.error) throw new Error(ledger.error);
+
+    if (open) await insert("trades", open);
+    const [saved] = await insert<Trade>("trades", trade);
+    await syncPosition(ticker, [...existing, ...(open ? [{ ...open, id: 0 } as Trade] : []), saved]);
+    if (applyCash) await addCash(cashDelta(saved));
+    revalidatePath("/", "layout");
+
+    const r = ledger.realized.get(1e15 + 1);
+    const label = `${item.name} ${side === "buy" ? "매수" : "매도"} 기록함`;
+    return r?.pnlKrw != null ? `${label} · 실현손익 ${Math.round(r.pnlKrw).toLocaleString("ko-KR")}원` : label;
+  });
+}
+
+export async function deleteTrade(id: number): Promise<ActionState> {
+  return run(async () => {
+    const [t] = await select<Trade>("trades", `select=*&id=eq.${id}`);
+    if (!t) throw new Error("이미 지워진 기록");
+    const rest = (await tradesOf(t.ticker)).filter((x) => x.id !== id);
+    const { error } = buildLedger(rest);
+    if (error) throw new Error(`이 기록을 지우면 이후 매도가 맞지 않음 (${error})`);
+    await remove("trades", `id=eq.${id}`);
+    await syncPosition(t.ticker, rest);
+    if (t.cash_applied) await addCash(-cashDelta(t));
+    revalidatePath("/", "layout");
+    return "삭제함";
+  });
 }
 
 // ---------- 뉴스 메모 ----------

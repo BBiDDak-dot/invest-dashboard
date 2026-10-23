@@ -7,9 +7,9 @@ import { friendly } from "./summarize";
 // 실적 스크리닝 종목의 "왜 실적이 늘었나" 분석 리포트.
 // 무료 키는 Gemini 구글 검색 기능이 막혀 있어(429), 근거 자료를 직접 모아 넘김:
 // 국내는 네이버 증권 종목 뉴스 중 실적 기사, 미국은 SEC에 낸 실적 보도자료(8-K)와 분기·연간 보고서의 MD&A
-// Pro는 무료 한도가 없어(429) Flash부터. 시험해 보니 Flash가 1~2분
-const MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest"];
-const MODEL_WAIT_MS = [180_000];
+// Gemini 4 Argon 먼저, 한도 초과·과부하·미지원이면 Flash(시험 때 1~2분) → Flash-Lite
+const MODELS = ["gemini-4-argon", "gemini-flash-latest", "gemini-flash-lite-latest"];
+const MODEL_WAIT_MS = [120_000, 120_000];
 
 const SYSTEM = `너는 한국 개인 투자자의 리서치 보조임. 상장사 한 곳의 최근 분기 실적이 전년 동기 대비 늘어난 이유를, 주어진 자료(실제 공시·기사)를 근거로 한국어 마크다운 분석 리포트로 작성함.
 
@@ -278,7 +278,7 @@ export async function writeEarningsReport(input: ReportInput) {
     } catch (e) {
       lastError = e;
       // 한도 초과·과부하·시간 초과는 다음 모델로
-      if (e instanceof ApiError && [429, 500, 503].includes(e.status)) continue;
+      if (e instanceof ApiError && [404, 429, 500, 503].includes(e.status)) continue;
       if (e instanceof Error && (e.name === "AbortError" || e.name === "TimeoutError")) continue;
       throw friendly(e);
     }
