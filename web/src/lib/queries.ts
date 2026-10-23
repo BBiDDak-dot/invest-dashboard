@@ -21,7 +21,7 @@ import {
 } from "./db";
 
 import { liveFx, liveQuotes } from "./live";
-import type { CashFlow, Trade } from "./trades";
+import { DEFAULT_FEE_RATES, type CashFlow, type FeeRates, type Trade } from "./trades";
 
 const FX_SERIES = "YF:KRW=X"; // 원/달러 환율 (관심종목 화면 상단에도 표시)
 
@@ -263,6 +263,17 @@ export async function getCashFlows(): Promise<CashFlow[]> {
     return await selectAll<CashFlow>("cash_flows", "select=*&order=flow_date.desc,id.desc");
   } catch {
     return [];
+  }
+}
+
+// 수수료율(%) 설정. 없으면 나무증권 기본값
+export async function getFeeRates(): Promise<FeeRates> {
+  try {
+    const rows = await select<{ key: string; value: number }>("settings", "select=key,value&key=in.(fee_kr_pct,fee_us_pct)");
+    const get = (k: string) => rows.find((r) => r.key === k)?.value;
+    return { kr: Number(get("fee_kr_pct") ?? DEFAULT_FEE_RATES.kr), us: Number(get("fee_us_pct") ?? DEFAULT_FEE_RATES.us) };
+  } catch {
+    return DEFAULT_FEE_RATES;
   }
 }
 

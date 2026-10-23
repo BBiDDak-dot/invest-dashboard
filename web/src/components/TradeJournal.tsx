@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Card, Empty } from "@/components/Card";
-import { CashFlowForm, DeleteCashFlowButton, DeleteTradeButton, TradeForm } from "@/components/TradeForm";
+import { CashFlowForm, DeleteCashFlowButton, DeleteTradeButton, FeeRateForm, TradeForm } from "@/components/TradeForm";
 import { changeColor, kstToday, num, pct } from "@/lib/format";
-import { buildLedger, flowDelta, type CashFlow, type Trade } from "@/lib/trades";
+import { buildLedger, flowDelta, type CashFlow, type FeeRates, type Trade } from "@/lib/trades";
 
 const th = "px-2 py-2 font-normal whitespace-nowrap";
 const td = "px-2 py-2 text-right tabular-nums whitespace-nowrap";
@@ -37,12 +37,14 @@ export function TradeJournal({
   items,
   rate,
   netWorth,
+  rates,
 }: {
   trades: Trade[];
   flows: CashFlow[];
   items: Option[];
   rate: number | null;
   netWorth: number;
+  rates: FeeRates;
 }) {
   const deposits = flows.filter((f) => f.kind === "deposit").reduce((s, f) => s + Number(f.amount), 0);
   const withdraws = flows.filter((f) => f.kind === "withdraw").reduce((s, f) => s + Number(f.amount), 0);
@@ -128,7 +130,10 @@ export function TradeJournal({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="매매 기록하기">
-          <TradeForm options={items} fx={rate} today={kstToday()} />
+          <TradeForm options={items} fx={rate} today={kstToday()} rates={rates} />
+          <div className="mt-3 border-t border-zinc-100 pt-3 dark:border-zinc-900">
+            <FeeRateForm rates={rates} />
+          </div>
         </Card>
         <Card title="종목별 실현손익">
           {tickerRows.length === 0 ? (

@@ -83,3 +83,16 @@ export type CashFlow = {
 };
 
 export const flowDelta = (f: Pick<CashFlow, "kind" | "amount">) => (f.kind === "deposit" ? 1 : -1) * Number(f.amount);
+
+// 수수료·세금 자동 계산 (요율은 %, 포트폴리오에서 바꿀 수 있음. 기본값은 나무증권 온라인)
+export type FeeRates = { kr: number; us: number };
+export const DEFAULT_FEE_RATES: FeeRates = { kr: 0.0036396, us: 0.25 }; // 국내: 유관기관 제비용 포함, 미국: 표준
+export const KR_SELL_TAX_PCT = 0.2; // 2026년부터 코스피(거래세 0.05+농특세 0.15)·코스닥 모두 0.20%
+
+// 국내는 원 단위 버림, 미국은 센트 반올림. 미국 매도 SEC fee는 0.001% 안팎이라 뺌
+export function estimateFee(market: "KR" | "US", side: "buy" | "sell", price: number, quantity: number, rates: FeeRates) {
+  const gross = price * quantity;
+  if (!(gross > 0)) return 0;
+  if (market === "KR") return Math.floor((gross * rates.kr) / 100) + (side === "sell" ? Math.floor((gross * KR_SELL_TAX_PCT) / 100) : 0);
+  return Math.round(gross * rates.us) / 100;
+}
