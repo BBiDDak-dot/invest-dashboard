@@ -21,7 +21,7 @@ import {
 } from "./db";
 
 import { liveFx, liveQuotes } from "./live";
-import type { Trade } from "./trades";
+import type { CashFlow, Trade } from "./trades";
 
 const FX_SERIES = "YF:KRW=X"; // 원/달러 환율 (관심종목 화면 상단에도 표시)
 
@@ -252,6 +252,15 @@ export type Portfolio = { rows: WatchRow[]; holdings: Holding[]; cash: number; f
 export async function getTrades(): Promise<Trade[]> {
   try {
     return await selectAll<Trade>("trades", "select=*&order=trade_date.desc,id.desc");
+  } catch {
+    return [];
+  }
+}
+
+// 현금 입금·출금 (016_cash_flows.sql 실행 전이면 빈 목록)
+export async function getCashFlows(): Promise<CashFlow[]> {
+  try {
+    return await selectAll<CashFlow>("cash_flows", "select=*&order=flow_date.desc,id.desc");
   } catch {
     return [];
   }
