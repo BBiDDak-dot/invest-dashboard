@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Card, Empty } from "@/components/Card";
-import { DeleteTradeButton, TradeForm } from "@/components/TradeForm";
+import { CashFlowForm, DeleteCashFlowButton, DeleteTradeButton, TradeForm } from "@/components/TradeForm";
 import { changeColor, kstToday, num, pct } from "@/lib/format";
-import { buildLedger, type Trade } from "@/lib/trades";
+import { buildLedger, flowDelta, type CashFlow, type Trade } from "@/lib/trades";
 
 const th = "px-2 py-2 font-normal whitespace-nowrap";
 const td = "px-2 py-2 text-right tabular-nums whitespace-nowrap";
@@ -31,7 +31,24 @@ function Kpi({ label, value, sub, color }: { label: string; value: string; sub?:
 type Option = { ticker: string; name: string; market: "KR" | "US"; avg_price?: number | null; quantity?: number | null };
 
 // 포트폴리오 탭 안의 매매 일지: 기록 폼, 실현손익 요약, 매매 내역
-export function TradeJournal({ trades, items, rate }: { trades: Trade[]; items: Option[]; rate: number | null }) {
+export function TradeJournal({
+  trades,
+  flows,
+  items,
+  rate,
+  netWorth,
+}: {
+  trades: Trade[];
+  flows: CashFlow[];
+  items: Option[];
+  rate: number | null;
+  netWorth: number;
+}) {
+  const deposits = flows.filter((f) => f.kind === "deposit").reduce((s, f) => s + Number(f.amount), 0);
+  const withdraws = flows.filter((f) => f.kind === "withdraw").reduce((s, f) => s + Number(f.amount), 0);
+  const netIn = deposits - withdraws;
+  // 입금을 빠짐없이 기록했을 때만 의미 있음: 지금 순자산이 넣은 돈보다 얼마나 늘었나
+  const gain = flows.length && netIn > 0 ? netWorth - netIn : null;
   const { realized } = buildLedger(trades, rate);
   const year = kstToday().slice(0, 4);
   const sells = trades.filter((t) => t.side === "sell" && realized.has(t.id));
@@ -54,7 +71,14 @@ export function TradeJournal({ trades, items, rate }: { trades: Trade[]; items: 
     <section id="journal" className="scroll-mt-4 space-y-4">
       <h2 className="pt-2 text-lg font-semibold">매매 일지</h2>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Kpi label="순입금 (입금−출금)" value={`${num(netIn, 0)}원`} sub={`입금 ${num(deposits, 0)} · 출금 ${num(withdraws, 0)}`} />
+        <Kpi
+          label="투자 손익 (순자산−순입금)"
+          value={gain == null ? "-" : `${signedWon(gain)}원`}
+          sub={gain == null ? "입금을 기록하면 계산됨" : pct((gain / netIn) * 100)}
+          color={changeColor(gain)}
+        />
         <Kpi label="누적 실현손익" value={`${signedWon(sumKrw(sells))}원`} color={changeColor(sumKrw(sells))} />
         <Kpi
           label={`${year}년 실현손익`}
@@ -62,8 +86,45 @@ export function TradeJournal({ trades, items, rate }: { trades: Trade[]; items: 
           color={changeColor(sumKrw(sells.filter((t) => t.trade_date.startsWith(year))))}
         />
         <Kpi label="매도 승률" value={sells.length ? `${num((wins / sells.length) * 100, 1)}%` : "-"} sub={`${wins}승 ${sells.length - wins}패`} />
-        <Kpi label="매매 기록" value={`${trades.filter((t) => t.side !== "open").length}건`} sub="기록하면 위 보유 종목·현금에 자동 반영" />
       </div>
+
+      <Card title="현금 입금·출금">
+        <CashFlowForm today={kstToday()} />
+        {flows.length > 0 && (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-zinc-500">
+                <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                  <th className={th}>날짜</th>
+                  <th className={th}>구분</th>
+                  <th className={`${th} text-right`}>금액(원)</th>
+                  <th className={th}>메모</th>
+                  <th className={th} />
+                </tr>
+              </thead>
+              <tbody>
+                {flows.map((f) => {
+                  const label = f.kind === "deposit" ? "입금" : "출금";
+                  return (
+                    <tr key={f.id} className="border-b border-zinc-100 dark:border-zinc-900">
+                      <td className="px-2 py-1.5 whitespace-nowrap text-zinc-500 tabular-nums">{f.flow_date}</td>
+                      <td className="px-2 py-1.5">
+                        <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${f.kind === "deposit" ? SIDE.buy.cls : SIDE.sell.cls}`}>{label}</span>
+                      </td>
+                      <td className={`${td} py-1.5`}>{signedWon(flowDelta(f))}</td>
+                      <td className="px-2 py-1.5 text-xs text-zinc-600 dark:text-zinc-400">{f.memo ?? ""}</td>
+                      <td className="px-2 py-1.5">
+                        <DeleteCashFlowButton id={f.id} label={`${f.flow_date} ${label} ${num(Number(f.amount), 0)}원`} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="mt-2 text-xs text-zinc-400">입금·출금을 기록하면 현금 잔고가 바로 바뀜. 이미 현금에 들어가 있는 지난 입금은 &quot;현금에 반영&quot;을 끄고 기록하면 순입금 계산에만 쓰임.</p>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="매매 기록하기">

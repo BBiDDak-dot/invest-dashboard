@@ -8,7 +8,7 @@ import { count, insert, remove, select, storage, update, type Security, type Wat
 import { writeEarningsReport, reportInput } from "@/lib/earningsReport";
 import { getCash, getEarningsTarget, getWatchItems } from "@/lib/queries";
 import { kstToday } from "@/lib/format";
-import { buildLedger, cashDelta, type Trade } from "@/lib/trades";
+import { buildLedger, cashDelta, flowDelta, type CashFlow, type Trade } from "@/lib/trades";
 import { summarizeReports, summarizeVideo } from "@/lib/summarize";
 import { fetchYearPrices } from "@/lib/yahoo";
 
@@ -266,6 +266,34 @@ export async function deleteTrade(id: number): Promise<ActionState> {
     await remove("trades", `id=eq.${id}`);
     await syncPosition(t.ticker, rest);
     if (t.cash_applied) await addCash(-cashDelta(t));
+    revalidatePath("/", "layout");
+    return "삭제함";
+  });
+}
+
+// 현금 입금·출금: 기록하면 현금 잔고가 바뀌고, 지우면 되돌림
+export async function addCashFlow(_: ActionState, form: FormData): Promise<ActionState> {
+  return run(async () => {
+    const kind = String(form.get("kind") ?? "");
+    const amount = numOrNull(form.get("amount"));
+    const date = String(form.get("flow_date") || kstToday());
+    if (kind !== "deposit" && kind !== "withdraw") throw new Error("입금·출금을 고를 것");
+    if (!amount || amount <= 0) throw new Error("금액을 입력할 것");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("날짜 형식이 맞지 않음");
+    const applyCash = form.get("cash") === "on";
+    const [saved] = await insert<CashFlow>("cash_flows", { flow_date: date, kind, amount, memo: textOrNull(form.get("memo")), cash_applied: applyCash });
+    if (applyCash) await addCash(flowDelta(saved));
+    revalidatePath("/", "layout");
+    return `${kind === "deposit" ? "입금" : "출금"} ${Math.round(amount).toLocaleString("ko-KR")}원 기록함`;
+  });
+}
+
+export async function deleteCashFlow(id: number): Promise<ActionState> {
+  return run(async () => {
+    const [f] = await select<CashFlow>("cash_flows", `select=*&id=eq.${id}`);
+    if (!f) throw new Error("이미 지워진 기록");
+    await remove("cash_flows", `id=eq.${id}`);
+    if (f.cash_applied) await addCash(-flowDelta(f));
     revalidatePath("/", "layout");
     return "삭제함";
   });

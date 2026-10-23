@@ -70,3 +70,16 @@ export function cashDelta(t: Pick<Trade, "side" | "price" | "quantity" | "fee" |
   const fee = Number(t.fee ?? 0);
   return (t.side === "buy" ? -(gross + fee) : gross - fee) * toKrw;
 }
+
+// 현금 입금·출금 (원)
+export type CashFlow = {
+  id: number;
+  flow_date: string;
+  kind: "deposit" | "withdraw";
+  amount: number;
+  memo: string | null;
+  cash_applied: boolean;
+  created_at: string;
+};
+
+export const flowDelta = (f: Pick<CashFlow, "kind" | "amount">) => (f.kind === "deposit" ? 1 : -1) * Number(f.amount);

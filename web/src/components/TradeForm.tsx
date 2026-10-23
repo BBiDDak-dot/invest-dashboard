@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { addTrade, deleteTrade } from "@/app/actions";
+import { addCashFlow, addTrade, deleteCashFlow, deleteTrade } from "@/app/actions";
 
 const input = "rounded-md border border-zinc-300 bg-transparent px-2 py-1.5 text-sm dark:border-zinc-700";
 const button = "rounded-md bg-zinc-900 px-3 py-1.5 text-sm text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900";
@@ -83,6 +83,56 @@ export function DeleteTradeButton({ id, label }: { id: number; label: string }) 
         if (!confirm(`${label} 기록을 지울까? 보유수량·평단·현금도 되돌아감`)) return;
         start(async () => {
           const r = await deleteTrade(id);
+          if (r?.error) alert(r.error);
+        });
+      }}
+    >
+      삭제
+    </button>
+  );
+}
+
+// 현금 입금·출금 기록. 저장하면 현금 잔고가 바로 바뀜
+export function CashFlowForm({ today }: { today: string }) {
+  const [state, action, pending] = useActionState(addCashFlow, null);
+  const [kind, setKind] = useState<"deposit" | "withdraw">("deposit");
+  return (
+    <form action={action} className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <input type="date" name="flow_date" defaultValue={today} className={input} />
+        <div className="flex overflow-hidden rounded-md border border-zinc-300 text-sm dark:border-zinc-700">
+          {(["deposit", "withdraw"] as const).map((k) => (
+            <label key={k} className={`cursor-pointer px-3 py-1.5 ${kind === k ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : ""}`}>
+              <input type="radio" name="kind" value={k} checked={kind === k} onChange={() => setKind(k)} className="sr-only" />
+              {k === "deposit" ? "입금" : "출금"}
+            </label>
+          ))}
+        </div>
+        <input name="amount" inputMode="numeric" placeholder="금액(원)" className={`${input} w-36`} />
+        <input name="memo" placeholder="메모 (예: 월급 적립)" className={`${input} min-w-0 flex-1`} />
+        <label className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-400" title="이미 현금에 들어가 있는 지난 입금을 기록만 할 때는 끔">
+          <input type="checkbox" name="cash" defaultChecked />
+          현금에 반영
+        </label>
+        <button disabled={pending} className={button}>
+          기록
+        </button>
+      </div>
+      {state && <p className={`text-xs ${state.error ? "text-amber-600" : "text-zinc-500"}`}>{state.error ?? state.ok}</p>}
+    </form>
+  );
+}
+
+export function DeleteCashFlowButton({ id, label }: { id: number; label: string }) {
+  const [pending, start] = useTransition();
+  return (
+    <button
+      disabled={pending}
+      className="text-xs text-zinc-400 hover:text-red-600 disabled:opacity-50"
+      onClick={() => {
+        if (!confirm(`${label} 기록을 지울까? 현금도 되돌아감`)) return;
+        start(async () => {
+          const r = await deleteCashFlow(id);
           if (r?.error) alert(r.error);
         });
       }}
