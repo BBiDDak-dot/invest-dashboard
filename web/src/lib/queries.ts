@@ -286,6 +286,51 @@ export async function getCash(): Promise<number> {
   }
 }
 
+// ---------- 퇴직연금 ----------
+export type PensionKind = "etf" | "fund" | "deposit" | "cash";
+export type PensionHolding = {
+  id: number;
+  account: string;
+  kind: PensionKind;
+  ticker: string | null;
+  name: string;
+  quantity: number | null;
+  avg_price: number | null;
+  principal: number | null;
+  amount: number | null;
+  safe: boolean;
+  memo: string | null;
+};
+export type PensionRow = PensionHolding & { price: number | null; evalKrw: number | null; costKrw: number | null; pnl: number | null; returnPct: number | null };
+
+// ETF는 현재가×수량, 나머지는 직접 입력한 평가금액. 원금은 ETF면 평단×수량
+export async function getPension(): Promise<{ rows: PensionRow[]; ready: boolean }> {
+  let items: PensionHolding[];
+  try {
+    items = await select<PensionHolding>("pension_holdings", "select=*&order=account,kind,id");
+  } catch {
+    return { rows: [], ready: false }; // 018_pension.sql 실행 전
+  }
+  const etfs = items.filter((h) => h.kind === "etf" && h.ticker);
+  const quotes = await liveQuotes(etfs.map((h) => ({ ticker: h.ticker!, market: "KR" as const })));
+  const rows = items.map((h) => {
+    const n = (v: number | null) => (v == null ? null : Number(v));
+    if (h.kind === "etf") {
+      const price = h.ticker ? (quotes.get(h.ticker)?.close ?? null) : null;
+      const q = n(h.quantity);
+      const evalKrw = price != null && q != null ? price * q : n(h.amount);
+      const costKrw = n(h.avg_price) != null && q != null ? n(h.avg_price)! * q : null;
+      const pnl = evalKrw != null && costKrw != null ? evalKrw - costKrw : null;
+      return { ...h, price, evalKrw, costKrw, pnl, returnPct: pnl != null && costKrw ? (pnl / costKrw) * 100 : null };
+    }
+    const evalKrw = n(h.amount);
+    const costKrw = n(h.principal) ?? evalKrw;
+    const pnl = evalKrw != null && costKrw != null ? evalKrw - costKrw : null;
+    return { ...h, price: null, evalKrw, costKrw, pnl, returnPct: pnl != null && costKrw ? (pnl / costKrw) * 100 : null };
+  });
+  return { rows, ready: true };
+}
+
 export async function getPortfolio(): Promise<Portfolio> {
   const [rows, fx, cash] = await Promise.all([getWatchlist(), getFx(), getCash()]);
   const rate = fx?.value ?? null;

@@ -284,6 +284,65 @@ export async function saveFeeRates(_: ActionState, form: FormData): Promise<Acti
   });
 }
 
+// ---------- 퇴직연금 ----------
+const PENSION_KINDS = ["etf", "fund", "deposit", "cash"] as const;
+
+export async function addPensionHolding(_: ActionState, form: FormData): Promise<ActionState> {
+  return run(async () => {
+    const kind = String(form.get("kind") ?? "");
+    if (!(PENSION_KINDS as readonly string[]).includes(kind)) throw new Error("구분을 고를 것");
+    const name = textOrNull(form.get("name"));
+    if (!name) throw new Error("상품명을 입력할 것");
+    const ticker = textOrNull(form.get("ticker"));
+    if (ticker && !/^[0-9A-Z]{6}$/.test(ticker)) throw new Error("ETF 코드는 6자리 (예: 069500)");
+    const row = {
+      account: textOrNull(form.get("account")) ?? "IRP",
+      kind,
+      ticker: kind === "etf" ? ticker : null,
+      name,
+      quantity: kind === "etf" ? numOrNull(form.get("quantity")) : null,
+      avg_price: kind === "etf" ? numOrNull(form.get("avg_price")) : null,
+      principal: kind === "etf" ? null : numOrNull(form.get("principal")),
+      amount: kind === "etf" ? null : numOrNull(form.get("amount")),
+      safe: form.get("safe") === "on" || kind === "deposit" || kind === "cash",
+      memo: textOrNull(form.get("memo")),
+    };
+    if (kind === "etf" && (!row.ticker || !row.quantity)) throw new Error("ETF는 코드와 수량을 입력할 것");
+    if (kind !== "etf" && row.amount == null) throw new Error("평가금액을 입력할 것");
+    await insert("pension_holdings", row);
+    revalidatePath("/portfolio");
+    return `${name} 추가함`;
+  });
+}
+
+// 표에서 칸 하나 편집
+const PENSION_NUM = ["quantity", "avg_price", "principal", "amount"] as const;
+const PENSION_TEXT = ["account", "name", "memo"] as const;
+export type PensionField = (typeof PENSION_NUM)[number] | (typeof PENSION_TEXT)[number] | "safe";
+
+export async function updatePensionField(id: number, field: PensionField, value: string): Promise<ActionState> {
+  return run(async () => {
+    let v: number | string | boolean | null;
+    if ((PENSION_NUM as readonly string[]).includes(field)) {
+      v = numOrNull(value);
+      if (v === null && value.replace(/,/g, "").trim() !== "") throw new Error("숫자로 입력할 것");
+    } else if ((PENSION_TEXT as readonly string[]).includes(field)) {
+      v = textOrNull(value);
+      if (field !== "memo" && !v) throw new Error("비워 둘 수 없음");
+    } else if (field === "safe") v = value === "true";
+    else throw new Error("편집할 수 없는 칸");
+    await update("pension_holdings", `id=eq.${Number(id)}`, { [field]: v });
+    revalidatePath("/portfolio");
+  });
+}
+
+export async function deletePensionHolding(id: number): Promise<ActionState> {
+  return run(async () => {
+    await remove("pension_holdings", `id=eq.${Number(id)}`);
+    revalidatePath("/portfolio");
+  });
+}
+
 // 현금 입금·출금: 기록하면 현금 잔고가 바뀌고, 지우면 되돌림
 export async function addCashFlow(_: ActionState, form: FormData): Promise<ActionState> {
   return run(async () => {
