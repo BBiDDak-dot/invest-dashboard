@@ -6,9 +6,9 @@ import { redirect } from "next/navigation";
 import { AUTH_COOKIE, authToken } from "@/lib/auth";
 import { count, insert, remove, select, storage, update, type Security, type WatchItem } from "@/lib/db";
 import { writeEarningsReport, reportInput } from "@/lib/earningsReport";
-import { getCash, getEarningsTarget, getWatchItems } from "@/lib/queries";
+import { getCash, getEarningsTarget, getFeeRates, getWatchItems } from "@/lib/queries";
 import { kstToday } from "@/lib/format";
-import { buildLedger, cashDelta, flowDelta, type CashFlow, type Trade } from "@/lib/trades";
+import { buildLedger, cashDelta, estimateFee, flowDelta, type CashFlow, type Trade } from "@/lib/trades";
 import { summarizeReports, summarizeVideo } from "@/lib/summarize";
 import { fetchYearPrices } from "@/lib/yahoo";
 
@@ -215,13 +215,13 @@ export async function addTrade(_: ActionState, form: FormData): Promise<ActionSt
     const side = String(form.get("side") ?? "");
     const price = numOrNull(form.get("price"));
     const quantity = numOrNull(form.get("quantity"));
-    const fee = numOrNull(form.get("fee")) ?? 0;
+    const feeInput = numOrNull(form.get("fee")); // 비우면 수수료율로 자동 계산
     const date = String(form.get("trade_date") || kstToday());
     if (!ticker) throw new Error("종목을 고를 것");
     if (side !== "buy" && side !== "sell") throw new Error("매수·매도를 고를 것");
     if (price == null || price < 0) throw new Error("체결 단가를 입력할 것");
     if (!quantity || quantity <= 0) throw new Error("수량을 입력할 것");
-    if (fee < 0) throw new Error("수수료는 0 이상");
+    if (feeInput != null && feeInput < 0) throw new Error("수수료는 0 이상");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("날짜 형식이 맞지 않음");
 
     const [item] = await select<WatchItem>("watchlist", `select=*&ticker=eq.${encodeURIComponent(ticker)}`);
@@ -229,6 +229,8 @@ export async function addTrade(_: ActionState, form: FormData): Promise<ActionSt
     const fx = item.market === "US" ? numOrNull(form.get("fx")) : null;
     const applyCash = form.get("cash") === "on";
     if (item.market === "US" && applyCash && !fx) throw new Error("현금에 반영하려면 환율을 입력할 것");
+
+    const fee = feeInput ?? estimateFee(item.market, side, price, quantity, await getFeeRates());
 
     const existing = await tradesOf(ticker);
     const base = { ticker, market: item.market, name: item.name };
@@ -268,6 +270,17 @@ export async function deleteTrade(id: number): Promise<ActionState> {
     if (t.cash_applied) await addCash(-cashDelta(t));
     revalidatePath("/", "layout");
     return "삭제함";
+  });
+}
+
+// 수수료율(%) 저장
+export async function saveFeeRates(_: ActionState, form: FormData): Promise<ActionState> {
+  return run(async () => {
+    const kr = numOrNull(form.get("fee_kr_pct"));
+    const us = numOrNull(form.get("fee_us_pct"));
+    if (kr == null || us == null || kr < 0 || us < 0) throw new Error("수수료율을 숫자로 입력할 것");
+    await insert("settings", [{ key: "fee_kr_pct", value: kr }, { key: "fee_us_pct", value: us }], { upsert: true });
+    revalidatePath("/", "layout");
   });
 }
 
