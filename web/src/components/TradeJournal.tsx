@@ -1,10 +1,8 @@
 import Link from "next/link";
 import { Card, Empty } from "@/components/Card";
-import { SetupNotice } from "@/components/SetupNotice";
 import { DeleteTradeButton, TradeForm } from "@/components/TradeForm";
 import { changeColor, kstToday, num, pct } from "@/lib/format";
-import { getFx, getTrades, getWatchItems } from "@/lib/queries";
-import { buildLedger } from "@/lib/trades";
+import { buildLedger, type Trade } from "@/lib/trades";
 
 const th = "px-2 py-2 font-normal whitespace-nowrap";
 const td = "px-2 py-2 text-right tabular-nums whitespace-nowrap";
@@ -30,9 +28,10 @@ function Kpi({ label, value, sub, color }: { label: string; value: string; sub?:
   );
 }
 
-export default async function JournalPage() {
-  const [trades, fx, items] = await Promise.all([getTrades(), getFx(), getWatchItems()]);
-  const rate = fx?.value ?? null;
+type Option = { ticker: string; name: string; market: "KR" | "US"; avg_price?: number | null; quantity?: number | null };
+
+// 포트폴리오 탭 안의 매매 일지: 기록 폼, 실현손익 요약, 매매 내역
+export function TradeJournal({ trades, items, rate }: { trades: Trade[]; items: Option[]; rate: number | null }) {
   const { realized } = buildLedger(trades, rate);
   const year = kstToday().slice(0, 4);
   const sells = trades.filter((t) => t.side === "sell" && realized.has(t.id));
@@ -52,9 +51,8 @@ export default async function JournalPage() {
   const tickerRows = [...byTicker].sort((a, b) => b[1].pnlKrw - a[1].pnlKrw);
 
   return (
-    <>
-      <SetupNotice />
-      <h1 className="text-lg font-semibold">매매 일지</h1>
+    <section id="journal" className="scroll-mt-4 space-y-4">
+      <h2 className="pt-2 text-lg font-semibold">매매 일지</h2>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="누적 실현손익" value={`${signedWon(sumKrw(sells))}원`} color={changeColor(sumKrw(sells))} />
@@ -64,7 +62,7 @@ export default async function JournalPage() {
           color={changeColor(sumKrw(sells.filter((t) => t.trade_date.startsWith(year))))}
         />
         <Kpi label="매도 승률" value={sells.length ? `${num((wins / sells.length) * 100, 1)}%` : "-"} sub={`${wins}승 ${sells.length - wins}패`} />
-        <Kpi label="매매 기록" value={`${trades.filter((t) => t.side !== "open").length}건`} sub={<Link href="/portfolio" className="hover:underline">포트폴리오 보기</Link>} />
+        <Kpi label="매매 기록" value={`${trades.filter((t) => t.side !== "open").length}건`} sub="기록하면 위 보유 종목·현금에 자동 반영" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -169,6 +167,6 @@ export default async function JournalPage() {
           매입단가는 이동평균(매수 수수료 포함), 실현손익은 매도 시점 평단 기준에서 매도 수수료·세금을 뺀 값임. 해외 실현손익은 매도 때 입력한 환율로 환산함. 잘못 기록했으면 지우고 다시 기록할 것.
         </p>
       </Card>
-    </>
+    </section>
   );
 }

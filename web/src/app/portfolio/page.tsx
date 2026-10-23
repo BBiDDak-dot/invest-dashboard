@@ -8,7 +8,7 @@ import { changeColor, kstToday, num, pct } from "@/lib/format";
 import { StockSearch } from "@/components/StockSearch";
 import { getPortfolio, getTrades, type Holding, type WatchRow } from "@/lib/queries";
 import { buildLedger } from "@/lib/trades";
-import { TradeForm } from "@/components/TradeForm";
+import { TradeJournal } from "@/components/TradeJournal";
 import { CashForm, HoldingForm } from "./HoldingForms";
 
 const th = "px-2 py-2 font-normal whitespace-nowrap";
@@ -271,9 +271,9 @@ export default async function PortfolioPage() {
         <Kpi label="순자산" value={`${num(total, 0)}원`} sub={`주식 ${num(all.evalKrw, 0)} · 현금 ${num(cash, 0)}`} />
         <Kpi label="평가손익" value={`${signedWon(all.pnlKrw)}원`} sub={`매입금액 ${num(all.costKrw, 0)}원`} color={changeColor(all.pnlKrw)} />
         <Kpi label="총수익률" value={pct(all.returnPct)} sub={`국내 ${pct(krSum.returnPct)} · 해외 ${pct(usSum.returnPct)}`} color={changeColor(all.returnPct)} />
-        <Link href="/journal" className="block">
-          <Kpi label="실현손익 (매매 일지)" value={`${signedWon(realizedAll)}원`} sub={`${year}년 ${signedWon(realizedYear)}원`} color={changeColor(realizedAll)} />
-        </Link>
+        <a href="#journal" className="block">
+          <Kpi label="실현손익 (아래 매매 일지)" value={`${signedWon(realizedAll)}원`} sub={`${year}년 ${signedWon(realizedYear)}원`} color={changeColor(realizedAll)} />
+        </a>
         <Kpi label="원/달러 환율" value={num(fx?.value)} sub={fx ? `${fx.date} 기준` : undefined} />
       </div>
 
@@ -364,15 +364,9 @@ export default async function PortfolioPage() {
         <Card title="매수 후보 (관심종목 중 미보유, 상승여력 순)">
           <Candidates rows={candidates} />
         </Card>
-        <Card title="매매 기록 (매매 일지와 연동)">
+        <Card title="보유 종목 직접 입력 (매매 일지 없이)">
           <div className="space-y-4">
-            <TradeForm options={rows} fx={fx?.value ?? null} today={kstToday()} />
-            <details className="text-sm">
-              <summary className="cursor-pointer text-xs text-zinc-500">일지 없이 매입단가·수량 직접 입력</summary>
-              <div className="mt-2">
-                <HoldingForm options={rows.filter((r) => !journaled.has(r.ticker))} />
-              </div>
-            </details>
+            <HoldingForm options={rows.filter((r) => !journaled.has(r.ticker))} />
             <div>
               <div className="mb-1.5 text-xs text-zinc-500">관심종목에 없는 종목은 여기서 추가하면 양쪽에 같이 들어감</div>
               <StockSearch />
@@ -380,6 +374,8 @@ export default async function PortfolioPage() {
           </div>
         </Card>
       </div>
+
+      <TradeJournal trades={trades} items={rows} rate={fx?.value ?? null} />
     </>
   );
 }
