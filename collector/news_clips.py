@@ -123,7 +123,8 @@ SCHEMA = {
         "required": ["i", "category", "industry", "score", "what", "title_ko", "companies"],
     },
 }
-MODELS = [os.environ.get("GEMINI_MODEL") or "gemini-flash-lite-latest", "gemini-flash-latest"]  # 무료 키는 Lite가 한도 여유가 큼
+# Gemini 4 Argon 먼저, 한도 초과·미지원이면 Lite(무료 한도 여유가 큼) → Flash
+MODELS = [os.environ.get("GEMINI_MODEL") or "gemini-4-argon", "gemini-flash-lite-latest", "gemini-flash-latest"]
 BATCH = 80  # 호출 수를 줄여 무료 한도 아끼기
 
 
@@ -230,6 +231,9 @@ def _gemini(key: str, items: list[dict]) -> tuple[list[dict], str]:
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                 params={"key": key}, json=body, timeout=120,
             )
+            if r.status_code == 404:  # 키에서 못 쓰는 모델 → 다음 모델
+                last = f"{model} 404"
+                break
             if r.status_code in (429, 503):
                 last = f"{model} {r.status_code}"
                 continue
