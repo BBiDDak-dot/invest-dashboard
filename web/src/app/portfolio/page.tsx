@@ -6,7 +6,8 @@ import { EditCell, StarButton } from "@/components/EditCell";
 import { Sparkline } from "@/components/Sparkline";
 import { changeColor, kstToday, num, pct } from "@/lib/format";
 import { StockSearch } from "@/components/StockSearch";
-import { getCashFlows, getFeeRates, getPortfolio, getTrades, type Holding, type WatchRow } from "@/lib/queries";
+import { getCashFlows, getFeeRates, getPension, getPortfolio, getTrades, type Holding, type WatchRow } from "@/lib/queries";
+import { PensionSection } from "@/components/PensionSection";
 import { buildLedger } from "@/lib/trades";
 import { TradeJournal } from "@/components/TradeJournal";
 import { CashForm, HoldingForm } from "./HoldingForms";
@@ -244,7 +245,13 @@ function Candidates({ rows }: { rows: WatchRow[] }) {
 }
 
 export default async function PortfolioPage() {
-  const [{ rows, holdings, cash, fx, total }, trades, flows, rates] = await Promise.all([getPortfolio(), getTrades(), getCashFlows(), getFeeRates()]);
+  const [{ rows, holdings, cash, fx, total }, trades, flows, rates, pension] = await Promise.all([
+    getPortfolio(),
+    getTrades(),
+    getCashFlows(),
+    getFeeRates(),
+    getPension(),
+  ]);
   const journaled = new Set(trades.map((t) => t.ticker));
   const { realized } = buildLedger(trades, fx?.value ?? null);
   const year = kstToday().slice(0, 4);
@@ -374,6 +381,8 @@ export default async function PortfolioPage() {
           </div>
         </Card>
       </div>
+
+      <PensionSection rows={pension.rows} ready={pension.ready} netWorth={total} />
 
       <TradeJournal trades={trades} flows={flows} items={rows} rate={fx?.value ?? null} netWorth={total} rates={rates} />
     </>
