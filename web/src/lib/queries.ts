@@ -21,7 +21,7 @@ import {
 } from "./db";
 
 import { liveFx, liveQuotes } from "./live";
-import { DEFAULT_FEE_RATES, type CashFlow, type FeeRates, type Trade } from "./trades";
+import { DEFAULT_FEE_RATES, type CashFlow, type FeeRates, type Snapshot, type Trade } from "./trades";
 
 const FX_SERIES = "YF:KRW=X"; // 원/달러 환율 (관심종목 화면 상단에도 표시)
 
@@ -261,6 +261,15 @@ export async function getTrades(): Promise<Trade[]> {
 export async function getCashFlows(): Promise<CashFlow[]> {
   try {
     return await selectAll<CashFlow>("cash_flows", "select=*&order=flow_date.desc,id.desc");
+  } catch {
+    return [];
+  }
+}
+
+// 일반 계좌 순자산 일별 기록 (연도별 수익률용). 019 SQL 실행 전이면 빈 배열
+export async function getSnapshots(): Promise<Snapshot[]> {
+  try {
+    return await selectAll<Snapshot>("portfolio_snapshots", "select=snap_date,net_worth&order=snap_date");
   } catch {
     return [];
   }

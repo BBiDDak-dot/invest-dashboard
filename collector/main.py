@@ -16,6 +16,7 @@ import us_earnings
 import macro
 import news_clips
 import prices
+import snapshot
 
 # DB 미연결(dry run) 시 사용할 예시 종목
 SAMPLE_WATCHLIST = [
@@ -42,6 +43,7 @@ def main() -> None:
         ("실적 스크리닝", lambda: earnings.collect(start)),
         ("미국 실적", us_earnings.collect),
         ("투자지표", lambda: macro.collect(start)),
+        ("순자산 기록", snapshot.collect),  # 시세·환율 다음에
         ("재무", lambda: financials.collect(watchlist)),
         ("수급", lambda: flows.collect(start)),
         ("종목 수급", stock_flows.collect),
