@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Card, Empty } from "@/components/Card";
 import { CashFlowForm, DeleteCashFlowButton, DeleteTradeButton, FeeRateForm, TradeForm } from "@/components/TradeForm";
 import { changeColor, kstToday, num, pct } from "@/lib/format";
-import { buildLedger, flowDelta, type CashFlow, type FeeRates, type Trade } from "@/lib/trades";
+import { buildLedger, flowDelta, RETURN_FIRST_YEAR, yearlyReturns, type CashFlow, type FeeRates, type Snapshot, type Trade } from "@/lib/trades";
 
 const th = "px-2 py-2 font-normal whitespace-nowrap";
 const td = "px-2 py-2 text-right tabular-nums whitespace-nowrap";
@@ -38,6 +38,7 @@ export function TradeJournal({
   rate,
   netWorth,
   rates,
+  snapshots,
 }: {
   trades: Trade[];
   flows: CashFlow[];
@@ -45,14 +46,16 @@ export function TradeJournal({
   rate: number | null;
   netWorth: number;
   rates: FeeRates;
+  snapshots: Snapshot[];
 }) {
   const deposits = flows.filter((f) => f.kind === "deposit").reduce((s, f) => s + Number(f.amount), 0);
   const withdraws = flows.filter((f) => f.kind === "withdraw").reduce((s, f) => s + Number(f.amount), 0);
   const netIn = deposits - withdraws;
-  // 입금을 빠짐없이 기록했을 때만 의미 있음: 지금 순자산이 넣은 돈보다 얼마나 늘었나
-  const gain = flows.length && netIn > 0 ? netWorth - netIn : null;
+  const today = kstToday();
+  const years = yearlyReturns(snapshots, flows, netWorth, today);
+  const current = years.find((y) => y.live);
   const { realized } = buildLedger(trades, rate);
-  const year = kstToday().slice(0, 4);
+  const year = today.slice(0, 4);
   const sells = trades.filter((t) => t.side === "sell" && realized.has(t.id));
   const sumKrw = (list: typeof sells) => list.reduce((s, t) => s + (realized.get(t.id)?.pnlKrw ?? 0), 0);
   const wins = sells.filter((t) => (realized.get(t.id)?.pnl ?? 0) > 0).length;
@@ -76,10 +79,10 @@ export function TradeJournal({
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Kpi label="순입금 (입금−출금)" value={`${num(netIn, 0)}원`} sub={`입금 ${num(deposits, 0)} · 출금 ${num(withdraws, 0)}`} />
         <Kpi
-          label="투자 손익 (순자산−순입금)"
-          value={gain == null ? "-" : `${signedWon(gain)}원`}
-          sub={gain == null ? "입금을 기록하면 계산됨" : pct((gain / netIn) * 100)}
-          color={changeColor(gain)}
+          label={`${today.slice(0, 4)}년 수익률`}
+          value={current ? pct(current.returnPct) : "-"}
+          sub={current ? `운용 손익 ${signedWon(current.gain)}원` : `${RETURN_FIRST_YEAR}년부터 자동 계산`}
+          color={changeColor(current?.returnPct)}
         />
         <Kpi label="누적 실현손익" value={`${signedWon(sumKrw(sells))}원`} color={changeColor(sumKrw(sells))} />
         <Kpi
@@ -90,8 +93,49 @@ export function TradeJournal({
         <Kpi label="매도 승률" value={sells.length ? `${num((wins / sells.length) * 100, 1)}%` : "-"} sub={`${wins}승 ${sells.length - wins}패`} />
       </div>
 
+      <Card title="연도별 수익률">
+        {years.length === 0 ? (
+          <Empty>
+            {RETURN_FIRST_YEAR - 1}-12-31 순자산을 기준으로 {RETURN_FIRST_YEAR}년부터 자동으로 계산됨.
+          </Empty>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-zinc-500">
+                <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                  <th className={th}>연도</th>
+                  <th className={`${th} text-right`}>기초 순자산</th>
+                  <th className={`${th} text-right`}>순입금</th>
+                  <th className={`${th} text-right`}>기말 순자산</th>
+                  <th className={`${th} text-right`}>운용 손익</th>
+                  <th className={`${th} text-right`}>수익률</th>
+                </tr>
+              </thead>
+              <tbody>
+                {years.map((y) => (
+                  <tr key={y.year} className="border-b border-zinc-100 dark:border-zinc-900">
+                    <td className="px-2 py-2 whitespace-nowrap">
+                      {y.year}
+                      {y.live && <span className="ml-1 text-xs text-zinc-400">진행 중</span>}
+                    </td>
+                    <td className={td} title={y.startDate}>{num(y.start, 0)}</td>
+                    <td className={td}>{signedWon(y.netFlow)}</td>
+                    <td className={td} title={y.endDate}>{num(y.end, 0)}</td>
+                    <td className={`${td} ${changeColor(y.gain)}`}>{signedWon(y.gain)}</td>
+                    <td className={`${td} font-medium ${changeColor(y.returnPct)}`}>{pct(y.returnPct)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="mt-2 text-xs text-zinc-400">
+          전년 마지막 날 순자산(주식+현금)을 기준으로, 그해 입금·출금 효과를 뺀 운용 성과만 계산함(수정 디에츠). 순자산은 매 수집 때 자동 기록됨. 퇴직연금은 빠짐.
+        </p>
+      </Card>
+
       <Card title="현금 입금·출금">
-        <CashFlowForm today={kstToday()} />
+        <CashFlowForm today={today} />
         {flows.length > 0 && (
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
@@ -125,12 +169,12 @@ export function TradeJournal({
             </table>
           </div>
         )}
-        <p className="mt-2 text-xs text-zinc-400">입금·출금을 기록하면 현금 잔고가 바로 바뀜. 이미 현금에 들어가 있는 지난 입금은 &quot;현금에 반영&quot;을 끄고 기록하면 순입금 계산에만 쓰임.</p>
+        <p className="mt-2 text-xs text-zinc-400">입금·출금을 기록하면 현금 잔고가 바로 바뀜. 이미 현금에 들어가 있는 지난 입금은 &quot;현금에 반영&quot;을 끄고 기록하면 순입금·연도별 수익률 계산에만 쓰임.</p>
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="매매 기록하기">
-          <TradeForm options={items} fx={rate} today={kstToday()} rates={rates} />
+          <TradeForm options={items} fx={rate} today={today} rates={rates} />
           <div className="mt-3 border-t border-zinc-100 pt-3 dark:border-zinc-900">
             <FeeRateForm rates={rates} />
           </div>
