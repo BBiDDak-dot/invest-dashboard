@@ -11,26 +11,21 @@ import db
 SERIES_ID = "ISM:MANUFACTURING_PMI"
 LIST_URL = "https://www.prnewswire.com/news/institute-for-supply-management/"
 # 예: "Manufacturing PMI® at 52.7%; March 2026 ISM® Manufacturing PMI® Report"
-HEADLINE = re.compile(r"^Manufacturing PMI\W*\s+at\s+([\d.]+)%;\s*([A-Z][a-z]+)\s+(\d{4})")
+HEADLINE = re.compile(r"Manufacturing PMI\W*\s+at\s+([\d.]+)%;\s*([A-Z][a-z]+)\s+(\d{4})")
 MONTHS = {m: i for i, m in enumerate(
     ["January", "February", "March", "April", "May", "June", "July", "August",
      "September", "October", "November", "December"], start=1)}
 
 
 def parse(page_html: str) -> list[dict]:
-    rows = []
-    for h3 in re.findall(r"<h3[^>]*>(.*?)</h3>", page_html, re.S):
-        text = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", h3))).strip()
-        # 제목 앞에 붙은 "Apr 01, 2026, 10:00 ET" 제거
-        text = re.sub(r"^\w{3} \d{2}, \d{4}, \d{2}:\d{2} ET\s*", "", text)
-        m = HEADLINE.match(text)
-        if m and m.group(2) in MONTHS:
-            rows.append({
-                "series_id": SERIES_ID,
-                "date": dt.date(int(m.group(3)), MONTHS[m.group(2)], 1).isoformat(),
-                "value": float(m.group(1)),
-            })
-    return rows
+    # 제목이 <h3>에서 <a> 안으로 옮겨지는 등 태그가 자주 바뀌어서, 태그를 다 지운 본문 전체에서 찾음
+    text = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", page_html)))
+    rows = {}
+    for m in HEADLINE.finditer(text):
+        if m.group(2) in MONTHS:
+            date = dt.date(int(m.group(3)), MONTHS[m.group(2)], 1).isoformat()
+            rows[date] = {"series_id": SERIES_ID, "date": date, "value": float(m.group(1))}
+    return list(rows.values())
 
 
 def collect(start: dt.date) -> None:
