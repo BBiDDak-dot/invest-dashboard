@@ -53,10 +53,16 @@ HISTORY_DAYS = 1100  # 화면에서 3년치를 보여주므로 항상 3년 이�
 
 def collect(start: dt.date) -> None:
     start = min(start, dt.date.today() - dt.timedelta(days=HISTORY_DAYS))
-    collect_fred(start)
-    collect_yahoo(start)
-    ism.collect(start)
     # config에서 뺀 지표는 DB에서도 지움 (관측치는 cascade로 함께 삭제)
     keep = [f"FRED:{sid}" for sid, *_ in FRED_SERIES] + [f"YF:{s}" for s, *_ in YAHOO_SERIES] + [ism.SERIES_ID] + sentiment.SERIES_IDS
     db.delete("macro_series", "series_id=not.in.(" + ",".join(f'"{k}"' for k in keep) + ")")
-    sentiment.collect(start)
+    # 한 출처가 실패해도 나머지(특히 심리 지표)는 저장되게 따로 실행
+    failed = []
+    for name, job in [("FRED", collect_fred), ("Yahoo", collect_yahoo), ("ISM", ism.collect), ("심리 지표", sentiment.collect)]:
+        try:
+            job(start)
+        except Exception as e:
+            print(f"[투자지표 {name}] 실패: {e}")
+            failed.append(name)
+    if failed:
+        raise RuntimeError(f"투자지표 실패: {', '.join(failed)}")
