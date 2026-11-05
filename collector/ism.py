@@ -37,6 +37,7 @@ def collect(start: dt.date) -> None:
         params = {"page": page, "pagesize": 100} if page > 1 else None
         r = requests.get(LIST_URL, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
         r.raise_for_status()
+        r.encoding = "utf-8"  # 응답에 charset이 없으면 latin-1로 읽혀 ®가 Â®로 깨지고 정규식이 안 맞음
         found = parse(r.text)
         if not found:
             if not rows:  # 원인 확인용: 받은 페이지가 어떤 모양인지 남김
