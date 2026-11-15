@@ -51,35 +51,69 @@ def _naver(code: str, verbose: bool) -> list[dict]:
     return out
 
 
-def _fnguide(code: str, verbose: bool) -> list[dict]:
-    r = requests.get(f"https://comp.fnguide.com/SVO2/ASP/SVD_Main.asp?pGB=1&gicode=A{code}", headers=UA, timeout=20)
-    r.encoding = "utf-8"
-    if verbose:
-        print(f"[fnguide] {code} HTTP {r.status_code} 길이 {len(r.text)}")
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
-    for box in ("highlight_D_Y", "highlight_B_Y"):  # 연결 → 별도
-        div = soup.find(id=box)
-        table = div and div.find("table")
-        if not table:
+def _bps_from_tables(html: str) -> list[dict]:
+    """재무 요약 표(머리글에 2025/12, 2026/12(E) 같은 열)에서 BPS 행을 뽑음. 첫 번째로 찾은 표를 씀."""
+    soup = BeautifulSoup(html, "html.parser")
+    for table in soup.find_all("table"):
+        heads = [th.get_text(" ", strip=True) for th in table.find_all("th")]
+        years = [h for h in heads if re.search(r"\d{4}/\d{2}", h)]
+        if not years:
             continue
-        heads = [th.get_text(" ", strip=True) for th in table.select("thead tr")[-1].find_all("th")]
-        for tr in table.select("tbody tr"):
+        for tr in table.find_all("tr"):
             th = tr.find("th")
             if not th or not th.get_text(strip=True).upper().startswith("BPS"):
                 continue
             vals = [td.get_text(strip=True) for td in tr.find_all("td")]
             out = []
-            for h, v in zip(heads[-len(vals):], vals):
+            n = min(len(years), len(vals))  # 오른쪽 끝을 맞춰 짝지음
+            for h, v in zip(years[-n:], vals[-n:]):
                 m = re.search(r"(\d{4})/(\d{2})", h)
                 b = _num(v)
                 if m and b:
                     out.append({"fy_end": _fy_end(int(m[1]), int(m[2])), "bps": b, "estimate": "(E)" in h or "(P)" in h})
-            if verbose:
-                print(f"[fnguide] {code} {box} 머리글 {heads} BPS {vals}")
             if out:
                 return out
     return []
+
+
+def _wisereport(code: str, verbose: bool) -> list[dict]:
+    """네이버 증권 '기업정보'(와이즈리포트) Financial Summary 연간. 보통 추정 3개년까지 있음."""
+    page_url = f"https://navercomp.wisereport.co.kr/v2/company/c1010001.aspx?cmp_cd={code}"
+    page = requests.get(page_url, headers=UA, timeout=20)
+    enc = re.search(r"encparam\s*:\s*'([^']+)'", page.text)
+    cid = re.search(r"\bid\s*:\s*'([^']+)'", page.text)
+    if verbose:
+        print(f"[wisereport] {code} HTTP {page.status_code} encparam {bool(enc)} id {bool(cid)}")
+    if not enc:
+        return []
+    r = requests.get(
+        "https://navercomp.wisereport.co.kr/v2/company/ajax/cF1001.aspx",
+        params={"cmp_cd": code, "fin_typ": "0", "freq_typ": "Y", "encparam": enc[1], "id": cid[1] if cid else ""},
+        headers={**UA, "Referer": page_url},
+        timeout=20,
+    )
+    out = _bps_from_tables(r.text)
+    if verbose:
+        print(f"[wisereport] {code} ajax HTTP {r.status_code} 길이 {len(r.text)} → {out}")
+        if not out:
+            print(r.text[:800])
+    return out
+
+
+def _fnguide(code: str, verbose: bool) -> list[dict]:
+    r = requests.get(f"https://comp.fnguide.com/SVO2/ASP/SVD_Main.asp?pGB=1&gicode=A{code}&cID=&MenuYn=Y&ReportGB=&NewMenuID=101&stkGb=701", headers=UA, timeout=20)
+    r.encoding = "utf-8"
+    soup = BeautifulSoup(r.text, "html.parser")
+    out = []
+    for box in ("highlight_D_Y", "highlight_B_Y"):  # 연결 → 별도
+        div = soup.find(id=box)
+        if div and (out := _bps_from_tables(str(div))):
+            break
+    if verbose:
+        print(f"[fnguide] {code} HTTP {r.status_code} 길이 {len(r.text)} → {out}")
+        if not out:
+            print(r.text[:500])
+    return out
 
 
 def _backfill_prices(item: dict) -> None:
@@ -96,9 +130,9 @@ def collect(verbose_first: bool = True) -> None:
     now = dt.datetime.now(dt.timezone.utc).isoformat()
     ok = 0
     for n, w in enumerate(items):
-        verbose = verbose_first and n < 2
+        verbose = verbose_first and n < 3
         rows, src = [], None
-        for name, fn in (("naver", _naver), ("fnguide", _fnguide)):
+        for name, fn in (("wisereport", _wisereport), ("fnguide", _fnguide), ("naver", _naver)):
             try:
                 got = fn(w["ticker"], verbose)
             except Exception as e:
@@ -114,7 +148,11 @@ def collect(verbose_first: bool = True) -> None:
             continue
         est = [r["fy_end"][:4] for r in rows if r["estimate"]]
         print(f"{w['ticker']} {w['name']} {src}: {len(rows)}개년, 추정 {est or '없음'}")
-        db.upsert("bps_annual", [{"ticker": w["ticker"], **r, "source": src, "updated_at": now} for r in rows])
+        try:
+            db.upsert("bps_annual", [{"ticker": w["ticker"], **r, "source": src, "updated_at": now} for r in rows])
+        except Exception as e:
+            print(f"{w['ticker']} 저장 실패: {e}")
+            continue
         try:
             _backfill_prices(w)
         except Exception as e:

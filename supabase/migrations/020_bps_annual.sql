@@ -4,7 +4,7 @@ create table if not exists bps_annual (
   fy_end     date not null,             -- 결산일 (예: 2026-12-31)
   bps        numeric not null,          -- 주당순자산(원)
   estimate   boolean not null default false,  -- true=컨센서스 추정치
-  source     text,                      -- naver | fnguide
+  source     text,                      -- wisereport | fnguide | naver
   updated_at timestamptz not null default now(),
   primary key (ticker, fy_end)
 );
