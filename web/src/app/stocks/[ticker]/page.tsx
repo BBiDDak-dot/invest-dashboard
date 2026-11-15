@@ -65,7 +65,7 @@ export default async function StockPage({ params }: PageProps<"/stocks/[ticker]"
         />
       </Card>
       {item.market === "KR" && (
-        <Card title="12M Fwd PBR 밴드 (5년, 주간)">
+        <Card title={band?.mode === "trailing" ? "PBR 밴드 (실적 BPS 기준, 5년)" : "12M Fwd PBR 밴드 (5년, 주간)"}>
           <PbrBandChart band={band} />
         </Card>
       )}

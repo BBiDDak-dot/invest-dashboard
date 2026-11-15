@@ -1,6 +1,7 @@
 """12M Fwd PBR 밴드용 연간 BPS(실적 + 컨센서스 추정치) 수집. 국내 종목만.
 
-출처: 네이버 증권 모바일 연간 재무(1순위) → FnGuide Financial Highlight(대체).
+출처: 네이버 증권 기업정보(와이즈리포트) Financial Summary 연간(추정 3개년) → 네이버 모바일 연간 재무(대체).
+(FnGuide 메인 페이지는 Actions에서 '페이지 없음'으로 막혀 안 씀.)
 화면은 이 연간 BPS를 결산월 기준으로 이어 붙여 '오늘부터 12개월 뒤 BPS'를 날짜별로 구함.
 지난 기간은 실제 BPS(사후 값)를 씀. 그때그때의 컨센서스 이력은 무료 출처가 없음.
 """
@@ -100,22 +101,6 @@ def _wisereport(code: str, verbose: bool) -> list[dict]:
     return out
 
 
-def _fnguide(code: str, verbose: bool) -> list[dict]:
-    r = requests.get(f"https://comp.fnguide.com/SVO2/ASP/SVD_Main.asp?pGB=1&gicode=A{code}&cID=&MenuYn=Y&ReportGB=&NewMenuID=101&stkGb=701", headers=UA, timeout=20)
-    r.encoding = "utf-8"
-    soup = BeautifulSoup(r.text, "html.parser")
-    out = []
-    for box in ("highlight_D_Y", "highlight_B_Y"):  # 연결 → 별도
-        div = soup.find(id=box)
-        if div and (out := _bps_from_tables(str(div))):
-            break
-    if verbose:
-        print(f"[fnguide] {code} HTTP {r.status_code} 길이 {len(r.text)} → {out}")
-        if not out:
-            print(r.text[:500])
-    return out
-
-
 def _backfill_prices(item: dict) -> None:
     """밴드는 5년치 주가가 필요함. 저장된 주가가 짧으면 한 번 더 받아 둠."""
     first = db.select("prices", f"select=date&ticker=eq.{item['ticker']}&order=date.asc&limit=1") if db.URL else []
@@ -132,13 +117,13 @@ def collect(verbose_first: bool = True) -> None:
     for n, w in enumerate(items):
         verbose = verbose_first and n < 3
         rows, src = [], None
-        for name, fn in (("wisereport", _wisereport), ("fnguide", _fnguide), ("naver", _naver)):
+        for name, fn in (("wisereport", _wisereport), ("naver", _naver)):
             try:
                 got = fn(w["ticker"], verbose)
             except Exception as e:
                 print(f"{w['ticker']} {name} 실패: {e}")
                 continue
-            # 추정치가 더 많은 쪽을 씀(네이버에 컨센서스가 없으면 FnGuide 시도)
+            # 추정치가 더 많은 쪽을 씀(와이즈리포트가 막히면 네이버 모바일: 추정 1년치뿐)
             if got and (not rows or sum(r["estimate"] for r in got) > sum(r["estimate"] for r in rows)):
                 rows, src = got, name
             if rows and sum(r["estimate"] for r in rows) >= 2:
