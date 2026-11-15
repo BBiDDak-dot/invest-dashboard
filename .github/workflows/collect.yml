@@ -9,6 +9,9 @@ on:
       days:
         description: "며칠 전부터 수집할지 (처음 1회는 1000 추천)"
         default: "10"
+      only:
+        description: "이 수집기만 실행 (예: PBR 밴드). 비우면 전체"
+        default: ""
 
 jobs:
   collect:
@@ -24,7 +27,7 @@ jobs:
           cache: pip
           cache-dependency-path: collector/requirements.txt
       - run: pip install -r requirements.txt
-      - run: python main.py --days "${{ github.event.inputs.days || 10 }}"
+      - run: python main.py --days "${{ github.event.inputs.days || 10 }}" --only "${{ github.event.inputs.only }}"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
@@ -32,7 +35,7 @@ jobs:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  # 없으면 산업 클리핑은 키워드 규칙으로 분류
       - run: python notify.py  # 내 종목 공시·실적 스크리닝 새 종목을 텔레그램으로
-        if: always()
+        if: always() && !github.event.inputs.only
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}

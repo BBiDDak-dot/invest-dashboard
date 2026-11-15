@@ -15,6 +15,7 @@ import stock_flows
 import us_earnings
 import macro
 import news_clips
+import pbr_band
 import prices
 import snapshot
 
@@ -28,7 +29,9 @@ SAMPLE_WATCHLIST = [
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--days", type=int, default=10, help="며칠 전부터 수집할지 (처음엔 크게, 예: 1000)")
+    parser.add_argument("--only", default="", help="이 이름의 수집기만 실행 (쉼표로 여러 개, 시험용)")
     args = parser.parse_args()
+    only = {s.strip() for s in args.only.split(",") if s.strip()}
     start = dt.date.today() - dt.timedelta(days=args.days)
 
     if os.environ.get("GITHUB_ACTIONS") and not db.URL:
@@ -47,9 +50,12 @@ def main() -> None:
         ("재무", lambda: financials.collect(watchlist)),
         ("수급", lambda: flows.collect(start)),
         ("종목 수급", stock_flows.collect),
+        ("PBR 밴드", pbr_band.collect),  # 시세 다음에(주가 보충)
         ("산업 클리핑", news_clips.collect),
         ("PDF 정리", cleanup.collect),
     ]:
+        if only and name not in only:
+            continue
         try:
             job()
         except Exception as e:  # 한 수집기가 실패해도 나머지는 진행
