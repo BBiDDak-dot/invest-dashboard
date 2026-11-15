@@ -7,6 +7,8 @@ import { NewsList } from "@/components/NewsList";
 import { QuarterTable } from "@/components/QuarterTable";
 import { getStockNews } from "@/lib/news";
 import { TtmCharts } from "@/components/TtmCharts";
+import { PbrBandChart } from "@/components/PbrBandChart";
+import { getPbrBand } from "@/lib/pbrBand";
 import { changeColor, num, pct } from "@/lib/format";
 import { getDisclosures, getFinancials, getPrices, getWatchItem, ratios } from "@/lib/queries";
 
@@ -14,11 +16,12 @@ export default async function StockPage({ params }: PageProps<"/stocks/[ticker]"
   const ticker = decodeURIComponent((await params).ticker);
   const item = await getWatchItem(ticker);
   if (!item) notFound();
-  const [prices, fin, disclosures, news] = await Promise.all([
+  const [prices, fin, disclosures, news, band] = await Promise.all([
     getPrices(ticker, 365),
     getFinancials([ticker]),
     item.market === "KR" ? getDisclosures(15, ticker) : Promise.resolve([]),
     item.market === "KR" ? getStockNews(ticker, 8).catch(() => []) : Promise.resolve([]),
+    item.market === "KR" ? getPbrBand(ticker).catch(() => null) : Promise.resolve(null),
   ]);
   const last = prices.at(-1);
   const auto = ratios(fin);
@@ -61,6 +64,11 @@ export default async function StockPage({ params }: PageProps<"/stocks/[ticker]"
           height={220}
         />
       </Card>
+      {item.market === "KR" && (
+        <Card title={band?.mode === "trailing" ? "PBR 밴드 (실적 BPS 기준, 5년)" : "12M Fwd PBR 밴드 (5년, 주간)"}>
+          <PbrBandChart band={band} />
+        </Card>
+      )}
       <Card title="재무">
         <div className="space-y-5">
           <TtmCharts fin={fin} />

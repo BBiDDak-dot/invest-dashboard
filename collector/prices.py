@@ -19,10 +19,11 @@ def _history(ticker: str, market: str, start: dt.date):
 BACKFILL_DAYS = 400  # 새로 추가된 종목은 1년치 이상 채움 (차트용)
 
 
-def collect(start: dt.date, watchlist: list[dict]) -> None:
+def collect(start: dt.date, watchlist: list[dict], force_start: bool = False) -> None:
+    """force_start=True면 start부터 그대로 받음(PBR 밴드용 장기 주가 보충)."""
     has_prices = {p["ticker"] for p in db.select("latest_prices", "select=ticker")} if db.URL else set()
     for w in watchlist:
-        since = start if w["ticker"] in has_prices else dt.date.today() - dt.timedelta(days=BACKFILL_DAYS)
+        since = start if force_start or w["ticker"] in has_prices else dt.date.today() - dt.timedelta(days=BACKFILL_DAYS)
         df = _history(w["ticker"], w["market"], min(start, since) - dt.timedelta(days=7))
         if df is None:
             print(f"{w['ticker']} 시세 없음")
