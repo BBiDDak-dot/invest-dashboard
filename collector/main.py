@@ -17,6 +17,7 @@ import macro
 import news_clips
 import pbr_band
 import prices
+import probe
 import snapshot
 
 # DB 미연결(dry run) 시 사용할 예시 종목
@@ -53,6 +54,7 @@ def main() -> None:
         ("PBR 밴드", pbr_band.collect),  # 시세 다음에(주가 보충)
         ("산업 클리핑", news_clips.collect),
         ("PDF 정리", cleanup.collect),
+        ("probe", probe.collect),
     ]:
         if only and name not in only:
             continue
