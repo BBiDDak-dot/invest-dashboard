@@ -36,6 +36,8 @@ def upsert(table: str, rows: list[dict]) -> None:
             data=json.dumps(rows[i : i + 500], ensure_ascii=False).encode(),
             timeout=60,
         )
+        if not r.ok:  # 500 등은 응답 본문에 원인(DB 오류 코드)이 있음
+            print(f"{table} 저장 실패 {r.status_code}: {r.text[:500]}")
         r.raise_for_status()
     print(f"{table}: {len(rows)}건 저장")
 
