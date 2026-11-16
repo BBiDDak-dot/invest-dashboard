@@ -5,7 +5,7 @@ import { SentimentNote } from "@/components/SentimentNote";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { SetupNotice } from "@/components/SetupNotice";
 import { TopPicks } from "@/components/TopPicks";
-import { getDisclosures, getMacro, getWatchlist, isSentiment } from "@/lib/queries";
+import { getDisclosures, getMacro, getWatchlist, isEconomic, isSentiment } from "@/lib/queries";
 
 export default async function Home() {
   const [watch, macro, disclosures] = await Promise.all([getWatchlist(), getMacro(), getDisclosures(10)]);
@@ -17,7 +17,7 @@ export default async function Home() {
         <TopPicks rows={watch.filter((w) => w.starred)} />
       </Card>
       <Card title="경제 지표 (최근 3년)">
-        <MacroGrid rows={macro.filter((r) => !isSentiment(r.series_id))} />
+        <MacroGrid rows={macro.filter((r) => isEconomic(r.series_id))} />
       </Card>
       <Card title="심리 지표 (최근 3년)">
         <MacroGrid rows={macro.filter((r) => isSentiment(r.series_id))} />

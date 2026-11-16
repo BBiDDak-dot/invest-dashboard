@@ -127,7 +127,7 @@ def collect_kr() -> None:
             got = [g for g in ex.map(one, stocks) if g]
         total = sum(_num(s["marketValue"]) or 0 for s in stocks)
         cap, earn, book = (sum(g[i] for g in got) for i in range(3))
-        print(f"[밸류에이션] {market}: 컨센서스 {len(got)}/{len(stocks)}종목, 시총 비중 {cap / total * 100:.0f}%")
+        print(f"[밸류에이션] {market}: 컨센서스 {len(got)}/{len(stocks)}종목, 시총 비중 {cap / total * 100:.0f}%, PER {cap / earn:.2f} PBR {cap / book:.2f}")
         if len(got) < n // 3 or earn <= 0 or book <= 0:
             raise RuntimeError(f"{market} 컨센서스 종목이 너무 적음 ({len(got)})")
         d = stocks[0].get("localTradedAt", "")[:10] or today.isoformat()  # 마지막 거래일 (새벽 수집이 다음 날짜로 찍히지 않게)
@@ -166,7 +166,7 @@ def collect_spx() -> None:
                 points[d.isoformat()] = v
                 break
         friday -= dt.timedelta(days=7)
-    print(f"[밸류에이션] S&P 500 FactSet {len(points)}주 추가")
+    print(f"[밸류에이션] S&P 500 FactSet {len(points)}주 추가 {dict(sorted(points.items())[-3:])}")
     if points:
         _save(SPX_ID, "S&P 500 12M Fwd PER (FactSet)", "US", points)
     elif not have:
@@ -178,6 +178,7 @@ def collect_ndx() -> None:
     m = re.search(r'"tradeDate":"(\d{4}-\d{2}-\d{2})[^"]*","instruments":\[[^\]]*?"name":"NASDAQ 100 Index","priceEarningsRatio":"[^"]*","priceEarningsRatioEstimate":"([\d.]+)"', t)
     if not m:
         raise RuntimeError("WSJ 표에서 NASDAQ 100 추정 PER을 못 찾음")
+    print(f"[밸류에이션] NASDAQ 100 {m[1]} {m[2]}")
     _save(NDX_ID, "NASDAQ 100 12M Fwd PER (WSJ·Birinyi)", "US", {m[1]: round(float(m[2]), 2)})
 
 

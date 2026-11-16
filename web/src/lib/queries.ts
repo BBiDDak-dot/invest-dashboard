@@ -119,10 +119,19 @@ const MACRO_ORDER = [
   "FG:KOSDAQ",
   "KOFIA:CREDIT_KOSPI",
   "KOFIA:CREDIT_KOSDAQ",
+  "VAL:KOSPI_FPER",
+  "VAL:KOSPI_FPBR",
+  "VAL:KOSDAQ_FPER",
+  "VAL:KOSDAQ_FPBR",
+  "VAL:SPX_FPER",
+  "VAL:NDX_FPER",
 ];
 
 // 심리 지표 (공포탐욕지수·신용잔고). 나머지는 경제 지표
 export const isSentiment = (id: string) => /^(CNN|FG|KOFIA):/.test(id);
+// 지수 밸류에이션 (12M Fwd PER·PBR). 경제 지표 탭에서 따로 묶어 보여줌
+export const isValuation = (id: string) => id.startsWith("VAL:");
+export const isEconomic = (id: string) => !isSentiment(id) && !isValuation(id);
 export const isFearGreed = (id: string) => /^(CNN|FG):/.test(id);
 
 export async function getMacro(days = 365 * 3): Promise<MacroRow[]> {
