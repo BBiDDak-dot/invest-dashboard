@@ -79,9 +79,9 @@ export function TradeJournal({
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Kpi label="순입금 (입금−출금)" value={`${num(netIn, 0)}원`} sub={`입금 ${num(deposits, 0)} · 출금 ${num(withdraws, 0)}`} />
         <Kpi
-          label={`${today.slice(0, 4)}년 수익률`}
+          label={`${today.slice(0, 4)} YTD 수익률`}
           value={current ? pct(current.returnPct) : "-"}
-          sub={current ? `운용 손익 ${signedWon(current.gain)}원` : `${RETURN_FIRST_YEAR}년부터 자동 계산`}
+          sub={current ? `운용 손익 ${signedWon(current.gain)}원${current.partial ? ` · ${current.startDate.slice(5)}부터` : ""}` : "순자산 기록 후 자동 계산"}
           color={changeColor(current?.returnPct)}
         />
         <Kpi label="누적 실현손익" value={`${signedWon(sumKrw(sells))}원`} color={changeColor(sumKrw(sells))} />
@@ -96,7 +96,7 @@ export function TradeJournal({
       <Card title="연도별 수익률">
         {years.length === 0 ? (
           <Empty>
-            {RETURN_FIRST_YEAR - 1}-12-31 순자산을 기준으로 {RETURN_FIRST_YEAR}년부터 자동으로 계산됨.
+            순자산 기록이 아직 없음. 매 수집 때 자동 기록되며, 첫 기록부터 {RETURN_FIRST_YEAR}년 YTD가 계산됨.
           </Empty>
         ) : (
           <div className="overflow-x-auto">
@@ -116,7 +116,8 @@ export function TradeJournal({
                   <tr key={y.year} className="border-b border-zinc-100 dark:border-zinc-900">
                     <td className="px-2 py-2 whitespace-nowrap">
                       {y.year}
-                      {y.live && <span className="ml-1 text-xs text-zinc-400">진행 중</span>}
+                      {y.live && <span className="ml-1 text-xs text-zinc-400">YTD</span>}
+                      {y.partial && <span className="ml-1 text-xs text-zinc-400">{y.startDate.slice(5)}부터</span>}
                     </td>
                     <td className={td} title={y.startDate}>{num(y.start, 0)}</td>
                     <td className={td}>{signedWon(y.netFlow)}</td>
@@ -130,7 +131,7 @@ export function TradeJournal({
           </div>
         )}
         <p className="mt-2 text-xs text-zinc-400">
-          전년 마지막 날 순자산(주식+현금)을 기준으로, 그해 입금·출금 효과를 뺀 운용 성과만 계산함(수정 디에츠). 순자산은 매 수집 때 자동 기록됨. 퇴직연금은 빠짐.
+          전년 마지막 날 순자산(주식+현금)을 기준으로, 그해 입금·출금 효과를 뺀 운용 성과만 계산함(수정 디에츠). 전년 기록이 없는 첫해는 그해 첫 기록일이 기준. 순자산은 매 수집 때 자동 기록됨. 퇴직연금은 빠짐.
         </p>
       </Card>
 

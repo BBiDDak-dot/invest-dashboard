@@ -99,7 +99,8 @@ export function estimateFee(market: "KR" | "US", side: "buy" | "sell", price: nu
 
 // 연도별 수익률 (수정 디에츠): 전년 마지막 순자산을 기준으로, 그해 입금·출금은 남은 기간 비율만큼 원금에 더함.
 // 수익률 = (기말 − 기초 − 순입금) / (기초 + Σ 입출금 × 남은 기간 비율). 입출금 효과를 빼고 운용 성과만 봄.
-export const RETURN_FIRST_YEAR = 2027; // 2026-12-31 순자산 기록부터 시작
+// 전년 기록이 없는 첫해(2026)는 그해 첫 순자산 기록을 기초로 씀(partial).
+export const RETURN_FIRST_YEAR = 2026;
 export type Snapshot = { snap_date: string; net_worth: number };
 export type YearReturn = {
   year: number;
@@ -111,6 +112,7 @@ export type YearReturn = {
   gain: number;
   returnPct: number | null;
   live: boolean; // 올해: 기말 = 지금 순자산
+  partial: boolean; // 기초가 전년 말이 아니라 그해 첫 기록
 };
 
 const days = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
@@ -121,7 +123,8 @@ export function yearlyReturns(snapshots: Snapshot[], flows: CashFlow[], netWorth
   const out: YearReturn[] = [];
   const thisYear = Number(today.slice(0, 4));
   for (let year = RETURN_FIRST_YEAR; year <= thisYear; year++) {
-    const base = lastBefore(`${year}-01-01`);
+    const prior = lastBefore(`${year}-01-01`);
+    const base = prior ?? snaps.find((s) => s.snap_date.startsWith(`${year}-`));
     if (!base) continue;
     const live = year === thisYear;
     const close = live ? { snap_date: today, net_worth: netWorth } : lastBefore(`${year + 1}-01-01`);
@@ -134,7 +137,7 @@ export function yearlyReturns(snapshots: Snapshot[], flows: CashFlow[], netWorth
     const end = Number(close.net_worth);
     const gain = end - start - netFlow;
     const denom = start + weighted;
-    out.push({ year, start, startDate: base.snap_date, end, endDate: close.snap_date, netFlow, gain, returnPct: denom > 0 ? (gain / denom) * 100 : null, live });
+    out.push({ year, start, startDate: base.snap_date, end, endDate: close.snap_date, netFlow, gain, returnPct: denom > 0 ? (gain / denom) * 100 : null, live, partial: !prior });
   }
   return out.reverse();
 }

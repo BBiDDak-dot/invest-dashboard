@@ -8,7 +8,8 @@ import { changeColor, kstToday, num, pct } from "@/lib/format";
 import { StockSearch } from "@/components/StockSearch";
 import { getCashFlows, getFeeRates, getPension, getPortfolio, getSnapshots, getTrades, type Holding, type WatchRow } from "@/lib/queries";
 import { PensionSection } from "@/components/PensionSection";
-import { buildLedger } from "@/lib/trades";
+import { buildLedger, yearlyReturns } from "@/lib/trades";
+import { LineChart } from "@/components/LineChart";
 import { TradeJournal } from "@/components/TradeJournal";
 import { CashForm, HoldingForm } from "./HoldingForms";
 
@@ -269,16 +270,26 @@ export default async function PortfolioPage() {
   const usSum = summarize(us, total);
   const maxWeight = Math.max(0, ...holdings.map((h) => h.weight ?? 0));
   const reached = holdings.filter((h) => h.upside != null && h.upside <= 0);
+  const today = kstToday();
+  const ytd = yearlyReturns(snapshots, flows, total, today).find((y) => y.live);
+  // 자산 변동: 매 수집 때 기록된 순자산 + 지금 순자산(실시간). 단위 만원
+  const trend = [...snapshots.filter((s) => s.snap_date < today), { snap_date: today, net_worth: total }];
   return (
     <>
       <SetupNotice />
       <AutoRefresh />
       <h1 className="text-lg font-semibold">포트폴리오</h1>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Kpi label="순자산" value={`${num(total, 0)}원`} sub={`주식 ${num(all.evalKrw, 0)} · 현금 ${num(cash, 0)}`} />
         <Kpi label="평가손익" value={`${signedWon(all.pnlKrw)}원`} sub={`매입금액 ${num(all.costKrw, 0)}원`} color={changeColor(all.pnlKrw)} />
         <Kpi label="총수익률" value={pct(all.returnPct)} sub={`국내 ${pct(krSum.returnPct)} · 해외 ${pct(usSum.returnPct)}`} color={changeColor(all.returnPct)} />
+        <Kpi
+          label={`${year} YTD 수익률`}
+          value={ytd ? pct(ytd.returnPct) : "-"}
+          sub={ytd ? `운용 손익 ${signedWon(ytd.gain)}원${ytd.partial ? ` · ${ytd.startDate.slice(5)}부터` : ""}` : "순자산 기록 후 계산"}
+          color={changeColor(ytd?.returnPct)}
+        />
         <a href="#journal" className="block">
           <Kpi label="실현손익 (아래 매매 일지)" value={`${signedWon(realizedAll)}원`} sub={`${year}년 ${signedWon(realizedYear)}원`} color={changeColor(realizedAll)} />
         </a>
@@ -290,6 +301,22 @@ export default async function PortfolioPage() {
           목표주가 도달: {reached.map((h) => h.name).join(", ")}. 매도 시그널 점검이 필요함.
         </p>
       )}
+
+      <Card title="자산 변동 (일반 계좌 순자산, 만원)">
+        {trend.length < 2 ? (
+          <p className="py-6 text-center text-sm text-zinc-500">순자산 기록이 쌓이면 표시됨. 매 수집(평일 16:40·06:30) 때 자동 기록됨.</p>
+        ) : (
+          <LineChart
+            labels={trend.map((s) => s.snap_date)}
+            series={[{ name: "순자산", color: "var(--series-1)", values: trend.map((s) => Math.round(Number(s.net_worth) / 10_000)) }]}
+            height={240}
+            decimals={0}
+          />
+        )}
+        <p className="mt-2 text-xs text-zinc-500">
+          주식+현금 합계. 입금·출금도 그대로 반영되므로 순수 운용 성과는 YTD 수익률을 볼 것. 퇴직연금은 빠짐.
+        </p>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="자산 배분">
