@@ -113,6 +113,10 @@ const MACRO_ORDER = [
   "ISM:MANUFACTURING_PMI",
   "YF:CL=F",
   FX_SERIES,
+  "YF:BZ=F",
+  "YF:RB=F",
+  "YF:HO=F",
+  "FRED:DJFUELUSGULF",
   "CNN:FEAR_GREED",
   "FG:NASDAQ",
   "FG:KOSPI",
@@ -131,7 +135,10 @@ const MACRO_ORDER = [
 export const isSentiment = (id: string) => /^(CNN|FG|KOFIA):/.test(id);
 // 지수 밸류에이션 (12M Fwd PER·PBR). 경제 지표 탭에서 따로 묶어 보여줌
 export const isValuation = (id: string) => id.startsWith("VAL:");
-export const isEconomic = (id: string) => !isSentiment(id) && !isValuation(id);
+// 석유제품 가격 (WTI는 경제 지표에 그대로 둠). 경제 지표 탭에서 따로 묶어 보여줌
+const OIL_SERIES = ["YF:BZ=F", "YF:RB=F", "YF:HO=F", "FRED:DJFUELUSGULF"];
+export const isOil = (id: string) => OIL_SERIES.includes(id);
+export const isEconomic = (id: string) => !isSentiment(id) && !isValuation(id) && !isOil(id);
 export const isFearGreed = (id: string) => /^(CNN|FG):/.test(id);
 
 export async function getMacro(days = 365 * 3): Promise<MacroRow[]> {
