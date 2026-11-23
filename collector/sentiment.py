@@ -144,6 +144,15 @@ def collect_mdd(start: dt.date) -> None:
         i = list(close.index).index(close.idxmax())
         print(f"[MDD 점검] {name} 고점 주변: {[(str(d), round(float(v), 2)) for d, v in close.iloc[max(0, i - 5):i + 6].items()]}")
         print(f"[MDD 점검] {name} 월말: {[(str(d), round(float(v), 2)) for d, v in pd.Series(close.values, index=pd.to_datetime(close.index)).resample("ME").last().tail(14).items()]}")
+        if country == "KR":  # 원인 확인용(임시): 네이버 지수 일봉과 비교
+            import re as _re
+            x = requests.get(f"https://fchart.stock.naver.com/sise.nhn?symbol={name}&timeframe=day&count=400&requestType=0", headers=UA, timeout=20).text
+            rows = [(m[1], float(m[2])) for m in _re.finditer(r'data="(\d{8})\|[^|]*\|[^|]*\|[^|]*\|([\d.]+)\|', x)]
+            if rows:
+                hi = max(rows, key=lambda r: r[1])
+                print(f"[MDD 점검] {name} 네이버 일봉 {len(rows)}개, 최고 {hi}, 최근 {rows[-3:]}, 하락률 {(rows[-1][1] / hi[1] - 1) * 100:.1f}%")
+            else:
+                print(f"[MDD 점검] {name} 네이버 응답 {x[:200]!r}")
         dd = drawdown(close)
         dd = dd[dd.index >= start]
         print(f"[MDD] {name}: 최고 {close.max():.2f}({close.idxmax()}), 현재 {dd.iloc[-1]:.1f}%, 기간 최저 {dd.min():.1f}%")
