@@ -107,6 +107,7 @@ export type MacroRow = MacroSeries & { history: MacroObservation[] };
 // 화면 표시 순서 (없는 지표는 뒤로)
 const MACRO_ORDER = [
   "YF:^TNX",
+  "FRED:DGS2",
   "FRED:DFEDTARU",
   "FRED:T10YIE",
   "FRED:CPILFESL",
