@@ -2,3 +2,4 @@ requests>=2.32
 yfinance>=0.2.50
 beautifulsoup4>=4.12
 pypdf>=4.0
+xlrd>=2.0

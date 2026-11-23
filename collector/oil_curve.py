@@ -10,6 +10,7 @@ Yahoo 개별 월물 시세(예: CLF27.NYM)로 WTI·브렌트·휘발유(RBOB)·�
 import datetime as dt
 
 import pandas as pd
+import requests
 import yfinance as yf
 
 import db
@@ -109,12 +110,51 @@ def collect_one(root: str, name: str, unit: str, start: dt.date) -> None:
     print(f"{name}: 곡선 {len(strip)}개월, 스프레드 이력 {len(m1m6)}일 (최근 M1/M6 {m1m6[-1][1] if m1m6 else '-'}%)")
 
 
+# EIA(미 에너지정보청) NYMEX 선물 1·2번째 월물 일별 가격. Yahoo엔 만기 지난 월물이 없어서
+# 근월물−차월물 스프레드 과거 이력은 여기서 채움 (EIA는 4번째 월물까지라 6개월물 스프레드는 이력 불가, 브렌트는 EIA에 없음)
+EIA_PAIRS = {
+    "CL": ("RCLC1", "RCLC2"),
+    "RB": ("EER_EPMRR_PE1_Y35NY_DPG", "EER_EPMRR_PE2_Y35NY_DPG"),
+    "HO": ("EER_EPD2F_PE1_Y35NY_DPG", "EER_EPD2F_PE2_Y35NY_DPG"),
+}
+
+
+def _eia_daily(series: str) -> dict[str, float]:
+    import xlrd
+
+    r = requests.get(f"https://www.eia.gov/dnav/pet/hist_xls/{series}d.xls", headers={"User-Agent": "Mozilla/5.0"}, timeout=60)
+    r.raise_for_status()
+    sheet = xlrd.open_workbook(file_contents=r.content).sheet_by_name("Data 1")
+    out = {}
+    for i in range(3, sheet.nrows):
+        d, v = sheet.cell_value(i, 0), sheet.cell_value(i, 1)
+        if isinstance(d, float) and isinstance(v, float) and v > 0:
+            out[xlrd.xldate_as_datetime(d, 0).date().isoformat()] = v
+    return out
+
+
+def backfill_m1m2(root: str, name: str, start: dt.date) -> None:
+    pair = EIA_PAIRS.get(root)
+    if not pair:
+        return
+    sid = f"CURVE:{root}:M1M2"
+    have = db.select("macro_observations", f"select=date&series_id=eq.{sid}&order=date.asc&limit=1") if db.URL else []
+    until = have[0]["date"] if have else dt.date.today().isoformat()
+    if until <= start.isoformat():
+        return  # 이미 충분함
+    m1, m2 = (_eia_daily(s) for s in pair)
+    points = [(d, (m1[d] / m2[d] - 1) * 100) for d in sorted(m1) if d in m2 and start.isoformat() <= d < until]
+    print(f"[유가 곡선] {name} EIA 1·2번째 월물로 스프레드 {len(points)}일 채움 ({points[0][0] if points else '-'} ~ {points[-1][0] if points else '-'}, EIA 마지막 {max(m1)})")
+    db.upsert("macro_observations", [{"series_id": sid, "date": d, "value": round(v, 4)} for d, v in points])
+
+
 def collect(start: dt.date) -> None:
     # 평소엔 최근 며칠만 받음(월물 수가 많아서). 이력을 처음 채울 땐 --days 1100으로 실행
     failed = []
     for root, name, unit in PRODUCTS:
         try:
             collect_one(root, name, unit, start)
+            backfill_m1m2(root, name, dt.date.today() - dt.timedelta(days=1100))
         except Exception as e:
             print(f"[유가 곡선 {name}] 실패: {e}")
             failed.append(name)
