@@ -128,12 +128,20 @@ const MACRO_ORDER = [
   "MDD:NASDAQ",
   "MDD:KOSPI",
   "MDD:KOSDAQ",
+  // 지수마다 Fwd·Trailing을 나란히 (2열이라 한 줄에 Fwd | Trailing)
   "VAL:KOSPI_FPER",
+  "VAL:KOSPI_TPER",
   "VAL:KOSPI_FPBR",
+  "VAL:KOSPI_TPBR",
   "VAL:KOSDAQ_FPER",
+  "VAL:KOSDAQ_TPER",
   "VAL:KOSDAQ_FPBR",
+  "VAL:KOSDAQ_TPBR",
   "VAL:SPX_FPER",
+  "VAL:SPX_TPER",
   "VAL:NDX_FPER",
+  "VAL:NDX_TPER",
+  "VAL:SPX_TPBR",
 ];
 
 // 지표 탭은 매크로(경제 지표·지수 밸류에이션) / 에너지(유가·석유제품·선물 곡선) / 심리(공포탐욕·신용잔고·MDD)
@@ -141,7 +149,7 @@ const MACRO_ORDER = [
 export const isSentiment = (id: string) => /^(CNN|FG|KOFIA):/.test(id);
 // 4대 지수 고점 대비 하락률. 심리 탭에서 한 차트로 겹쳐 보여줌
 export const isMdd = (id: string) => id.startsWith("MDD:");
-// 지수 밸류에이션 (12M Fwd PER·PBR). 매크로 탭에서 따로 묶어 보여줌
+// 지수 밸류에이션 (12M Fwd·Trailing PER·PBR). 매크로 탭에서 따로 묶어 보여줌
 export const isValuation = (id: string) => id.startsWith("VAL:");
 // 에너지: 원유·석유제품 가격
 const OIL_SERIES = ["YF:CL=F", "YF:BZ=F", "YF:RB=F", "YF:HO=F", "FRED:DJFUELUSGULF"];
