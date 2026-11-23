@@ -124,9 +124,13 @@ def collect_credit(start: dt.date) -> None:
         _save(series_id, name, "조원", "KR", points)
 
 
-def drawdown(close: pd.Series) -> pd.Series:
+# Yahoo 이력 시작 전의 사상 최고 종가. KOSDAQ은 Yahoo가 2000-10부터라 닷컴 고점(2000-03-10)이 빠져 있음
+PRIOR_PEAK = {"^KQ11": 2834.40}
+
+
+def drawdown(close: pd.Series, prior_peak: float = 0) -> pd.Series:
     """사상 최고 종가 대비 하락률(%). 0 = 신고가."""
-    return (close / close.cummax() - 1) * 100
+    return (close / close.cummax().clip(lower=prior_peak) - 1) * 100
 
 
 MDD_YEARS = 20  # 장기 흐름을 보려고 20년치 저장 (최근 3년은 일별, 그 전은 주별 마지막 날)
@@ -143,21 +147,14 @@ def collect_mdd(start: dt.date) -> None:
         close = df["Close"].dropna()
         close = close[close > 0]
         close.index = close.index.date
-        dd = drawdown(close)
+        dd = drawdown(close, PRIOR_PEAK.get(symbol, 0))
         dd = dd[dd.index >= since]
         old = dd[dd.index < daily_since]
         week = pd.Series(["%d-%02d" % d.isocalendar()[:2] for d in old.index], index=old.index)
         old = old[~week.duplicated(keep="last")]  # 주마다 마지막 거래일
         dd = pd.concat([old, dd[dd.index >= daily_since]])
-        print(f"[MDD] {name}: Yahoo 이력 {close.index[0]}~, 최고 {close.max():.2f}({close.idxmax()}), 현재 {dd.iloc[-1]:.1f}%, 20년 최저 {dd.min():.1f}%({dd.idxmin()}), {len(dd)}개")
+        print(f"[MDD] {name}: Yahoo 이력 {close.index[0]}~, 최고 {max(close.max(), PRIOR_PEAK.get(symbol, 0)):.2f}, 현재 {dd.iloc[-1]:.1f}%, 20년 최저 {dd.min():.1f}%({dd.idxmin()}), {len(dd)}개")
         _save(series_id, f"{name} 고점 대비 하락률(MDD)", "%", country, {d.isoformat(): round(float(v), 2) for d, v in dd.items()})
-        if country == "KR":  # 시험용(임시): 네이버 일봉 이력 시작일
-            import re as _re
-            x = requests.get(f"https://fchart.stock.naver.com/sise.nhn?symbol={name}&timeframe=day&count=8000&requestType=0", headers=UA, timeout=30).text
-            rows = [(m[1], float(m[2])) for m in _re.finditer(r'data="(\d{8})\|[^|]*\|[^|]*\|[^|]*\|([\d.]+)\|', x)]
-            if rows:
-                hi = max(rows, key=lambda r: r[1])
-                print(f"[MDD 점검] {name} 네이버 일봉 {len(rows)}개 {rows[0][0]}~, 최고 {hi}")
 
 
 def collect(start: dt.date) -> None:

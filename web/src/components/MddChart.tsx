@@ -42,7 +42,7 @@ export function MddChart({ rows, height = 220 }: { rows: MacroRow[]; height?: nu
         })}
       </div>
       <p className="mt-3 text-xs text-zinc-400">
-        MDD = 종가가 그날까지의 사상 최고 종가보다 몇 % 아래인지 (0%면 신고가). 고점은 Yahoo에 있는 전체 이력에서 찾음. 최근 3년은 일별, 그 전은 주별
+        MDD = 종가가 그날까지의 사상 최고 종가보다 몇 % 아래인지 (0%면 신고가). 고점은 Yahoo 전체 이력(S&P 500 1927년~, NASDAQ 1971년~, KOSPI 1996년~)에서 찾고, KOSDAQ은 Yahoo 이력(2000-10~) 이전인 닷컴 고점 2,834(2000-03-10)를 기준으로 함. 최근 3년은 일별, 그 전은 주별
         값. 보통 −10%면 조정, −20%면 약세장으로 봄.
       </p>
     </>
