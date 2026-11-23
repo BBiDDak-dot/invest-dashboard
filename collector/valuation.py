@@ -7,6 +7,13 @@
 - S&P 500: FactSet Earnings Insight 주간 보고서(PDF)의 forward 12-month P/E. 지난 3년 보고서로 이력도 채움.
 - NASDAQ 100: WSJ P/E & Yields 표의 Estimate(Birinyi Associates, 12개월 선행, 금요일마다 갱신). 이력 없음.
 - 미국 지수 12M Fwd PBR은 무료 출처가 없어 안 넣음.
+
+Trailing(직전 실적 기준) PER·PBR:
+- KOSPI·KOSDAQ: KRX 지수 PER은 로그인이 필요해 같은 종목들로 직접 계산함(KRX 방식처럼 직전 사업연도 확정 실적 기준).
+  지수 PER = 시총 합 / 직전 결산 지배순이익 합(적자 기업 제외), PBR = 시총 합 / 직전 결산 자본 합(자본잠식 제외). 결산 실적은 결산일 90일 뒤(12월 결산이면 4월)부터 반영.
+  처음 한 번은 네이버 주간 종가로 지난 3년을 채움(지금 종목 구성·주식 수로 거꾸로 계산하므로 근사치).
+- S&P 500: multpl(S&P·Shiller 자료) 월별 Trailing PER(발표 기준 TTM 이익)·분기별 PBR + 현재 추정치.
+- NASDAQ 100: worldperatio 월별 Trailing PER. NASDAQ 100 PBR은 무료 출처가 없어 안 넣음.
 """
 
 import datetime as dt
@@ -23,7 +30,10 @@ UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.3
       "Accept-Language": "en-US,en;q=0.9,ko;q=0.8"}
 KR_UNIVERSE = {"KOSPI": 200, "KOSDAQ": 150}
 SPX_ID, NDX_ID = "VAL:SPX_FPER", "VAL:NDX_FPER"
-SERIES_IDS = [f"VAL:{m}_{k}" for m in KR_UNIVERSE for k in ("FPER", "FPBR")] + [SPX_ID, NDX_ID]
+SPX_TPER, SPX_TPBR, NDX_TPER = "VAL:SPX_TPER", "VAL:SPX_TPBR", "VAL:NDX_TPER"
+SERIES_IDS = ([f"VAL:{m}_{k}" for m in KR_UNIVERSE for k in ("FPER", "FPBR", "TPER", "TPBR")]
+              + [SPX_ID, NDX_ID, SPX_TPER, SPX_TPBR, NDX_TPER])
+REPORT_LAG = 90  # 결산일 뒤 이만큼 지나야 확정 실적(사업보고서)이 나온 것으로 봄
 FACTSET = "https://advantage.factset.com/hubfs/Website/Resources%20Section/Research%20Desk/Earnings%20Insight/EarningsInsight_{:%m%d%y}.pdf"
 HISTORY_DAYS = 1100
 
@@ -106,33 +116,96 @@ def fwd_12m(annual: dict[str, dict], key: str, today: dt.date) -> float | None:
     return w * fy1[key] + (1 - w) * fy2[key]
 
 
+def trailing(annual: dict[str, dict], key: str, day: dt.date) -> float | None:
+    """그날 기준 가장 최근에 확정된(결산일 + 90일 지난) 실적 값."""
+    done = [e for e in sorted(annual) if not annual[e]["est"] and dt.date.fromisoformat(e) + dt.timedelta(days=REPORT_LAG) <= day]
+    return annual[done[-1]].get(key) if done else None
+
+
+def _weekly_close(code: str, weeks: int) -> dict[str, float]:
+    """네이버 주간 종가 {날짜: 종가}"""
+    r = requests.get("https://fchart.stock.naver.com/sise.nhn", params={"symbol": code, "timeframe": "week", "count": weeks, "requestType": 0}, headers=UA, timeout=20)
+    out = {}
+    for d, *_, close, _vol in (x.split("|") for x in re.findall(r'data="([^"]+)"', r.text)):
+        out[f"{d[:4]}-{d[4:6]}-{d[6:]}"] = float(close)
+    return out
+
+
+def _has(series_id: str) -> bool:
+    if not db.URL:
+        return False
+    sid = requests.utils.quote(series_id, safe="")
+    return len(db.select("macro_observations", f"select=date&series_id=eq.{sid}&limit=30")) >= 30
+
+
 def collect_kr() -> None:
     today = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=9)).date()
     for market, n in KR_UNIVERSE.items():
         stocks = _universe(market, n)
+        backfill = not _has(f"VAL:{market}_TPER")
 
         def one(s: dict):
             try:
                 a = _annual(s["itemCode"])
+                weekly = _weekly_close(s["itemCode"], HISTORY_DAYS // 7 + 2) if backfill else {}
             except requests.RequestException as e:
                 print(f"[밸류에이션] {s['stockName']} 실패: {e}")
                 return None
             price, mcap = _num(s["closePrice"]), _num(s["marketValue"])  # 시총 백만원
-            eps, bps = fwd_12m(a, "eps", today), fwd_12m(a, "bps", today)
-            if not price or not mcap or eps is None or bps is None:
+            if not price or not mcap or not a:
                 return None
-            return mcap, mcap * eps / price, mcap * bps / price
+            return s, a, price, mcap, weekly
 
         with ThreadPoolExecutor(6) as ex:
             got = [g for g in ex.map(one, stocks) if g]
         total = sum(_num(s["marketValue"]) or 0 for s in stocks)
-        cap, earn, book = (sum(g[i] for g in got) for i in range(3))
-        print(f"[밸류에이션] {market}: 컨센서스 {len(got)}/{len(stocks)}종목, 시총 비중 {cap / total * 100:.0f}%, PER {cap / earn:.2f} PBR {cap / book:.2f}")
-        if len(got) < n // 3 or earn <= 0 or book <= 0:
-            raise RuntimeError(f"{market} 컨센서스 종목이 너무 적음 ({len(got)})")
         d = stocks[0].get("localTradedAt", "")[:10] or today.isoformat()  # 마지막 거래일 (새벽 수집이 다음 날짜로 찍히지 않게)
+
+        # 12M Fwd: 컨센서스 있는 종목만
+        cap = earn = book = 0.0
+        for _s, a, price, mcap, _w in got:
+            eps, bps = fwd_12m(a, "eps", today), fwd_12m(a, "bps", today)
+            if eps is None or bps is None:
+                continue
+            cap, earn, book = cap + mcap, earn + mcap * eps / price, book + mcap * bps / price
+        print(f"[밸류에이션] {market} Fwd: 시총 비중 {cap / total * 100:.0f}%, PER {cap / max(earn, 1):.2f} PBR {cap / max(book, 1):.2f}")
+        if cap < total / 3 or earn <= 0 or book <= 0:
+            raise RuntimeError(f"{market} 컨센서스 종목이 너무 적음")
         _save(f"VAL:{market}_FPER", f"{market} 12M Fwd PER", "KR", {d: round(cap / earn, 2)})
         _save(f"VAL:{market}_FPBR", f"{market} 12M Fwd PBR", "KR", {d: round(cap / book, 2)})
+
+        # Trailing: 직전 확정 실적. 주식 수 = 지금 시총 / 지금 주가 (과거 날짜도 같은 주식 수로 근사)
+        def agg(day: dt.date, price_of) -> tuple[float, float, float, float] | None:
+            cap = earn = bcap = book = 0.0
+            for _s, a, price, mcap, weekly in got:
+                p = price_of(price, weekly)
+                if not p:
+                    continue
+                shares = mcap / price
+                eps, bps = trailing(a, "eps", day), trailing(a, "bps", day)
+                # KRX처럼 적자 기업은 PER에서, 자본잠식 기업은 PBR에서 뺌
+                if eps is not None and eps > 0:
+                    cap, earn = cap + shares * p, earn + shares * eps
+                if bps is not None and bps > 0:
+                    bcap, book = bcap + shares * p, book + shares * bps
+            if earn <= 0 or book <= 0 or cap < total / 3:
+                return None
+            return cap / earn, bcap / book, cap, bcap
+
+        now = agg(today, lambda price, _w: price)
+        if not now:
+            raise RuntimeError(f"{market} Trailing 계산 실패")
+        per, pbr = {d: round(now[0], 2)}, {d: round(now[1], 2)}
+        print(f"[밸류에이션] {market} Trailing: 시총 비중 {now[2] / total * 100:.0f}%, PER {now[0]:.2f} PBR {now[1]:.2f}")
+        if backfill:
+            days = sorted({w for g in got for w in g[4] if w < d and w >= (today - dt.timedelta(days=HISTORY_DAYS)).isoformat()})
+            for w in days:
+                r = agg(dt.date.fromisoformat(w), lambda _p, weekly, w=w: weekly.get(w))
+                if r:
+                    per[w], pbr[w] = round(r[0], 2), round(r[1], 2)
+            print(f"[밸류에이션] {market} Trailing 과거 {len(per) - 1}주 채움 {dict(sorted(per.items())[:2])}")
+        _save(f"VAL:{market}_TPER", f"{market} Trailing PER", "KR", per)
+        _save(f"VAL:{market}_TPBR", f"{market} Trailing PBR", "KR", pbr)
 
 
 # ---------- 미국 ----------
@@ -182,9 +255,44 @@ def collect_ndx() -> None:
     _save(NDX_ID, "NASDAQ 100 12M Fwd PER (WSJ·Birinyi)", "US", {m[1]: round(float(m[2]), 2)})
 
 
+def _multpl(path: str) -> dict[str, float]:
+    """multpl 표 {날짜: 값}. 맨 위 행은 오늘 추정치(†)."""
+    t = requests.get(f"https://www.multpl.com/{path}", headers=UA, timeout=30).text
+    since = (dt.date.today() - dt.timedelta(days=HISTORY_DAYS)).isoformat()
+    out = {}
+    for day, v in re.findall(r"<td>\s*([A-Z][a-z]{2} \d{1,2}, \d{4})\s*</td>\s*<td>\s*(?:<abbr[^>]*>[^<]*</abbr>|&#x2002;)?\s*([\d.]+)", t):
+        d = dt.datetime.strptime(day, "%b %d, %Y").date().isoformat()
+        if d >= since:
+            out[d] = float(v)
+    if not out:
+        raise RuntimeError(f"multpl {path} 표를 못 읽음")
+    return out
+
+
+def collect_us_trailing() -> None:
+    per = _multpl("s-p-500-pe-ratio/table/by-month")
+    pbr = _multpl("s-p-500-price-to-book/table/by-quarter")
+    print(f"[밸류에이션] S&P 500 Trailing PER {len(per)}개 {max(per)}={per[max(per)]}, PBR {len(pbr)}개 {max(pbr)}={pbr[max(pbr)]}")
+    _save(SPX_TPER, "S&P 500 Trailing PER (multpl)", "US", per)
+    _save(SPX_TPBR, "S&P 500 Trailing PBR (multpl)", "US", pbr)
+
+    t = requests.get("https://worldperatio.com/index/nasdaq-100/", headers=UA, timeout=30).text
+    m = re.search(r"detailPE_data\s*=\s*\[(.*?)\];", t, re.S)
+    since = (dt.date.today() - dt.timedelta(days=HISTORY_DAYS)).isoformat()
+    ndx = {}
+    for y, mo, day, v in re.findall(r"Date\.UTC\((\d{4}),\s*(\d+),\s*(\d+)\),([\d.]+)", m[1] if m else ""):
+        d = dt.date(int(y), int(mo) + 1, int(day)).isoformat()  # JS 월은 0부터
+        if d >= since:
+            ndx[d] = round(float(v), 2)
+    if not ndx:
+        raise RuntimeError("worldperatio NASDAQ 100 PER을 못 읽음")
+    print(f"[밸류에이션] NASDAQ 100 Trailing PER {len(ndx)}개 {max(ndx)}={ndx[max(ndx)]}")
+    _save(NDX_TPER, "NASDAQ 100 Trailing PER (worldperatio)", "US", ndx)
+
+
 def collect() -> None:
     failed = []
-    for name, job in [("국내", collect_kr), ("S&P 500", collect_spx), ("NASDAQ 100", collect_ndx)]:
+    for name, job in [("국내", collect_kr), ("S&P 500", collect_spx), ("NASDAQ 100", collect_ndx), ("미국 Trailing", collect_us_trailing)]:
         try:
             job()
         except Exception as e:

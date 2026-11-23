@@ -41,6 +41,18 @@ const fpbr: Meaning = {
   threshold: { pct: 3 },
 };
 
+const tper: Meaning = {
+  up: "확정 이익 대비 주가가 더 오름 → 비싸짐. Fwd PER보다 많이 높으면 시장이 이익 급증을 기대하는 중",
+  down: "주가 하락 또는 실적 증가 → 싸짐. 이익이 꺾이는 중이면 낮아 보여도 함정일 수 있음",
+  threshold: { pct: 3 },
+};
+
+const tpbr: Meaning = {
+  up: "장부 순자산 대비 주가 상승 → 밸류 부담 증가",
+  down: "장부 순자산 대비 주가 하락 → 저평가 매력 증가 (국내는 1배 근처가 역사적 바닥권)",
+  threshold: { pct: 3 },
+};
+
 const MEANINGS: Record<string, Meaning> = {
   "YF:^TNX": {
     up: "할인율 상승 → 성장주·장기채에 부담, 대출·주택 위축. 경기 호조나 물가 우려가 원인",
@@ -90,6 +102,13 @@ const MEANINGS: Record<string, Meaning> = {
   "VAL:NDX_FPER": fper,
   "VAL:KOSPI_FPBR": fpbr,
   "VAL:KOSDAQ_FPBR": fpbr,
+  "VAL:KOSPI_TPER": tper,
+  "VAL:KOSDAQ_TPER": tper,
+  "VAL:SPX_TPER": tper,
+  "VAL:NDX_TPER": tper,
+  "VAL:KOSPI_TPBR": tpbr,
+  "VAL:KOSDAQ_TPBR": tpbr,
+  "VAL:SPX_TPBR": tpbr,
 };
 
 export type Trend = {

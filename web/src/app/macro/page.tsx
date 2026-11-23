@@ -12,7 +12,7 @@ export default async function MacroPage() {
       <Card title="경제 지표 (최근 3년)">
         <MacroGrid rows={rows.filter((r) => isEconomic(r.series_id))} />
       </Card>
-      <Card title="지수 밸류에이션 (12M Fwd)">
+      <Card title="지수 밸류에이션 (12M Fwd · Trailing)">
         <MacroGrid rows={rows.filter((r) => isValuation(r.series_id))} />
         <ValuationNote />
       </Card>
