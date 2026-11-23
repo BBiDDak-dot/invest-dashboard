@@ -5,6 +5,7 @@
   (1) 125일 이동평균 대비 괴리, (2) 52주 고저 범위 안의 위치, (3) RSI(14), (4) 변동성(낮을수록 탐욕)
   각 항목을 최근 1년(252영업일) 안의 백분위(0~100)로 바꾼 뒤 평균함.
 - 신용융자 잔고: 금융투자협회 종합통계(freesis) 유가증권·코스닥 신용거래융자, 조원.
+- 4대 지수 MDD: S&P 500·NASDAQ·KOSPI·KOSDAQ 종가가 그때까지의 사상 최고 종가보다 몇 % 아래인지 (0이면 신고가).
 """
 
 import datetime as dt
@@ -25,7 +26,14 @@ OWN_INDEXES = [
     ("FG:KOSDAQ", "KOSDAQ 공포탐욕지수 (자체 계산)", "^KQ11", None),
 ]
 CREDIT = [("KOFIA:CREDIT_KOSPI", "KOSPI 신용융자 잔고", "TMPV3"), ("KOFIA:CREDIT_KOSDAQ", "KOSDAQ 신용융자 잔고", "TMPV4")]
-SERIES_IDS = [CNN_ID] + [s[0] for s in OWN_INDEXES] + [s[0] for s in CREDIT]
+# 고점 대비 하락률(MDD). 공포탐욕에 쓰는 4대 지수
+MDD_INDEXES = [
+    ("MDD:SPX", "S&P 500", "^GSPC", "US"),
+    ("MDD:NASDAQ", "NASDAQ", "^IXIC", "US"),
+    ("MDD:KOSPI", "KOSPI", "^KS11", "KR"),
+    ("MDD:KOSDAQ", "KOSDAQ", "^KQ11", "KR"),
+]
+SERIES_IDS = [CNN_ID] + [s[0] for s in OWN_INDEXES] + [s[0] for s in CREDIT] + [s[0] for s in MDD_INDEXES]
 
 
 def _save(series_id: str, name: str, unit: str, country: str, points: dict[str, float]) -> None:
@@ -116,9 +124,28 @@ def collect_credit(start: dt.date) -> None:
         _save(series_id, name, "조원", "KR", points)
 
 
+def drawdown(close: pd.Series) -> pd.Series:
+    """사상 최고 종가 대비 하락률(%). 0 = 신고가."""
+    return (close / close.cummax() - 1) * 100
+
+
+def collect_mdd(start: dt.date) -> None:
+    for series_id, name, symbol, country in MDD_INDEXES:
+        # 고점은 전체 이력에서 찾아야 해서 상장 이후 전부 받음
+        df = yf.Ticker(symbol).history(period="max", auto_adjust=False)
+        if df.empty:
+            raise RuntimeError(f"Yahoo {symbol} 데이터 없음")
+        close = df["Close"].dropna()
+        close.index = close.index.date
+        dd = drawdown(close)
+        dd = dd[dd.index >= start]
+        print(f"[MDD] {name}: 최고 {close.max():.2f}({close.idxmax()}), 현재 {dd.iloc[-1]:.1f}%, 기간 최저 {dd.min():.1f}%")
+        _save(series_id, f"{name} 고점 대비 하락률(MDD)", "%", country, {d.isoformat(): round(float(v), 2) for d, v in dd.items()})
+
+
 def collect(start: dt.date) -> None:
     failed = []
-    for name, job in [("CNN", collect_cnn), ("자체 공포탐욕", collect_own), ("신용융자", collect_credit)]:
+    for name, job in [("CNN", collect_cnn), ("자체 공포탐욕", collect_own), ("신용융자", collect_credit), ("MDD", collect_mdd)]:
         try:
             job(start)
         except Exception as e:  # 한 출처가 막혀도 나머지는 저장

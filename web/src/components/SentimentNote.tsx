@@ -1,4 +1,4 @@
-// 심리 지표 계산 방법 안내 (심리 지표 탭·요약 화면 공통)
+// 심리 지표 계산 방법 안내 (심리 탭·요약 화면 공통)
 export function SentimentNote() {
   return (
     <p className="mt-3 text-xs text-zinc-400">
