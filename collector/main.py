@@ -14,6 +14,7 @@ import flows
 import stock_flows
 import us_earnings
 import macro
+import macro_check
 import news_clips
 import oil_curve
 import pbr_band
@@ -26,6 +27,9 @@ SAMPLE_WATCHLIST = [
     {"ticker": "005930", "market": "KR", "corp_code": "00126380"},
     {"ticker": "AAPL", "market": "US", "corp_code": None},
 ]
+
+
+ON_DEMAND = {"지표 점검"}  # 정기 수집에선 빼고 only로 부를 때만 실행
 
 
 def main() -> None:
@@ -57,8 +61,9 @@ def main() -> None:
         ("PBR 밴드", pbr_band.collect),  # 시세 다음에(주가 보충)
         ("산업 클리핑", news_clips.collect),
         ("PDF 정리", cleanup.collect),
+        ("지표 점검", macro_check.collect),  # 시험용: only="지표 점검"으로 실행
     ]:
-        if only and name not in only:
+        if (only and name not in only) or (not only and name in ON_DEMAND):
             continue
         try:
             job()
