@@ -51,6 +51,8 @@ def _save(series_id: str, name: str, unit: str, points: list[tuple[str, float]],
     db.upsert("macro_series", [{"series_id": series_id, "source": "Yahoo", "name": name, "unit": unit, "country": "US"}])
     if replace:
         db.delete("macro_observations", f"series_id=eq.{series_id}")
+    elif points:  # 이번에 계산한 기간은 새로 씀 (빠진 날·주말 줄이 남지 않게)
+        db.delete("macro_observations", f"series_id=eq.{series_id}&date=gte.{points[0][0]}")
     db.upsert("macro_observations", [{"series_id": series_id, "date": d, "value": round(v, 4)} for d, v in points])
 
 
