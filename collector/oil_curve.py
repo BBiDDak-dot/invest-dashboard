@@ -62,8 +62,15 @@ def collect_one(root: str, name: str, unit: str, start: dt.date) -> None:
     close = _download(list(tickers), start)
     if close.empty:
         raise RuntimeError(f"{name} 월물 시세 없음")
+    # Yahoo는 일요일 저녁 장을 따로 한 줄로 줘서(대부분 빈 값) 주말 줄은 버림
+    close = close[[d.weekday() < 5 for d in close.index]]
     last_day = max(close.index)
     last_seen = {t: close[t].last_valid_index() for t in close.columns}
+    # 먼 월물은 거래가 없는 날이 있어 3일까지는 직전 값으로 채움 (만기 뒤로는 안 채움)
+    filled = close.ffill(limit=3)
+    for t, d in last_seen.items():
+        filled.loc[[i for i in filled.index if i > d], t] = float("nan")
+    close = filled
     expired = [t for t, d in last_seen.items() if d < last_day - dt.timedelta(days=5)]
     print(f"{name}: 월물 {len(close.columns)}개 받음 (만기 지난 월물 {len(expired)}개), 마지막 {last_day}")
 
