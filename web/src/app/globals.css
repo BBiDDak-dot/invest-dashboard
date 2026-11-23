@@ -23,10 +23,12 @@ body {
   font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 }
 
-/* 차트 색상 (계열 순서 고정: 1 파랑, 2 주황) */
+/* 차트 색상 (계열 순서 고정: 1 파랑, 2 주황, 3 초록, 4 보라) */
 :root {
   --series-1: #2a78d6;
   --series-2: #eb6834;
+  --series-3: #1f9d55;
+  --series-4: #8b5cf6;
   --chart-grid: #e4e4e7;
   --chart-zero: #a1a1aa;
 }
@@ -35,6 +37,8 @@ body {
   :root {
     --series-1: #3987e5;
     --series-2: #d95926;
+    --series-3: #2fb36a;
+    --series-4: #a07cf8;
     --chart-grid: #27272a;
     --chart-zero: #52525b;
   }

@@ -111,8 +111,8 @@ const MACRO_ORDER = [
   "FRED:T10YIE",
   "FRED:CPILFESL",
   "ISM:MANUFACTURING_PMI",
-  "YF:CL=F",
   FX_SERIES,
+  "YF:CL=F",
   "YF:BZ=F",
   "YF:RB=F",
   "YF:HO=F",
@@ -123,6 +123,10 @@ const MACRO_ORDER = [
   "FG:KOSDAQ",
   "KOFIA:CREDIT_KOSPI",
   "KOFIA:CREDIT_KOSDAQ",
+  "MDD:SPX",
+  "MDD:NASDAQ",
+  "MDD:KOSPI",
+  "MDD:KOSDAQ",
   "VAL:KOSPI_FPER",
   "VAL:KOSPI_FPBR",
   "VAL:KOSDAQ_FPER",
@@ -131,16 +135,20 @@ const MACRO_ORDER = [
   "VAL:NDX_FPER",
 ];
 
-// 심리 지표 (공포탐욕지수·신용잔고). 나머지는 경제 지표
+// 지표 탭은 매크로(경제 지표·지수 밸류에이션) / 에너지(유가·석유제품·선물 곡선) / 심리(공포탐욕·신용잔고·MDD)
+// 심리 지표 (공포탐욕지수·신용잔고)
 export const isSentiment = (id: string) => /^(CNN|FG|KOFIA):/.test(id);
-// 지수 밸류에이션 (12M Fwd PER·PBR). 경제 지표 탭에서 따로 묶어 보여줌
+// 4대 지수 고점 대비 하락률. 심리 탭에서 한 차트로 겹쳐 보여줌
+export const isMdd = (id: string) => id.startsWith("MDD:");
+// 지수 밸류에이션 (12M Fwd PER·PBR). 매크로 탭에서 따로 묶어 보여줌
 export const isValuation = (id: string) => id.startsWith("VAL:");
-// 석유제품 가격 (WTI는 경제 지표에 그대로 둠). 경제 지표 탭에서 따로 묶어 보여줌
-const OIL_SERIES = ["YF:BZ=F", "YF:RB=F", "YF:HO=F", "FRED:DJFUELUSGULF"];
+// 에너지: 원유·석유제품 가격
+const OIL_SERIES = ["YF:CL=F", "YF:BZ=F", "YF:RB=F", "YF:HO=F", "FRED:DJFUELUSGULF"];
 export const isOil = (id: string) => OIL_SERIES.includes(id);
-// 유가 선물 곡선(콘탱고·백워데이션). 석유제품 카드 아래에 따로 보여줌
+// 유가 선물 곡선(콘탱고·백워데이션). 에너지 탭에서 따로 보여줌
 export const isCurve = (id: string) => id.startsWith("CURVE:");
-export const isEconomic = (id: string) => !isSentiment(id) && !isValuation(id) && !isOil(id) && !isCurve(id);
+// 나머지는 매크로 경제 지표
+export const isEconomic = (id: string) => !isSentiment(id) && !isMdd(id) && !isValuation(id) && !isOil(id) && !isCurve(id);
 export const isFearGreed = (id: string) => /^(CNN|FG):/.test(id);
 
 export async function getMacro(days = 365 * 3): Promise<MacroRow[]> {
