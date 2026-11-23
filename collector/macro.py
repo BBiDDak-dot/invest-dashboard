@@ -7,6 +7,7 @@ import requests
 
 import db
 import ism
+import oil_curve
 import sentiment
 import valuation
 import yfinance as yf
@@ -55,7 +56,7 @@ HISTORY_DAYS = 1100  # 화면에서 3년치를 보여주므로 항상 3년 이�
 def collect(start: dt.date) -> None:
     start = min(start, dt.date.today() - dt.timedelta(days=HISTORY_DAYS))
     # config에서 뺀 지표는 DB에서도 지움 (관측치는 cascade로 함께 삭제)
-    keep = [f"FRED:{sid}" for sid, *_ in FRED_SERIES] + [f"YF:{s}" for s, *_ in YAHOO_SERIES] + [ism.SERIES_ID] + sentiment.SERIES_IDS + valuation.SERIES_IDS
+    keep = [f"FRED:{sid}" for sid, *_ in FRED_SERIES] + [f"YF:{s}" for s, *_ in YAHOO_SERIES] + [ism.SERIES_ID] + sentiment.SERIES_IDS + valuation.SERIES_IDS + oil_curve.SERIES_IDS
     db.delete("macro_series", "series_id=not.in.(" + ",".join(f'"{k}"' for k in keep) + ")")
     # 한 출처가 실패해도 나머지(특히 심리 지표)는 저장되게 따로 실행
     failed = []
