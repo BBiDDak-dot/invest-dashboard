@@ -143,7 +143,7 @@ def collect_mdd(start: dt.date) -> None:
         print(f"[MDD 점검] {name} 최근: {[(str(d), round(float(v), 2)) for d, v in close.tail(5).items()]}")
         i = list(close.index).index(close.idxmax())
         print(f"[MDD 점검] {name} 고점 주변: {[(str(d), round(float(v), 2)) for d, v in close.iloc[max(0, i - 5):i + 6].items()]}")
-        print(f"[MDD 점검] {name} 월말: {[(str(d), round(float(v), 2)) for d, v in close.groupby([(d.year, d.month) for d in close.index]).last().tail(14).items()]}")
+        print(f"[MDD 점검] {name} 월말: {[(str(d), round(float(v), 2)) for d, v in pd.Series(close.values, index=pd.to_datetime(close.index)).resample("ME").last().tail(14).items()]}")
         dd = drawdown(close)
         dd = dd[dd.index >= start]
         print(f"[MDD] {name}: 최고 {close.max():.2f}({close.idxmax()}), 현재 {dd.iloc[-1]:.1f}%, 기간 최저 {dd.min():.1f}%")
