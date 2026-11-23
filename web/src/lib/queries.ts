@@ -138,7 +138,9 @@ export const isValuation = (id: string) => id.startsWith("VAL:");
 // 석유제품 가격 (WTI는 경제 지표에 그대로 둠). 경제 지표 탭에서 따로 묶어 보여줌
 const OIL_SERIES = ["YF:BZ=F", "YF:RB=F", "YF:HO=F", "FRED:DJFUELUSGULF"];
 export const isOil = (id: string) => OIL_SERIES.includes(id);
-export const isEconomic = (id: string) => !isSentiment(id) && !isValuation(id) && !isOil(id);
+// 유가 선물 곡선(콘탱고·백워데이션). 석유제품 카드 아래에 따로 보여줌
+export const isCurve = (id: string) => id.startsWith("CURVE:");
+export const isEconomic = (id: string) => !isSentiment(id) && !isValuation(id) && !isOil(id) && !isCurve(id);
 export const isFearGreed = (id: string) => /^(CNN|FG):/.test(id);
 
 export async function getMacro(days = 365 * 3): Promise<MacroRow[]> {
