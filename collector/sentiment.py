@@ -124,22 +124,36 @@ def collect_credit(start: dt.date) -> None:
         _save(series_id, name, "조원", "KR", points)
 
 
-def drawdown(close: pd.Series) -> pd.Series:
+# Yahoo 이력 시작 전의 사상 최고 종가. KOSDAQ은 Yahoo가 2000-10부터라 닷컴 고점(2000-03-10)이 빠져 있음
+PRIOR_PEAK = {"^KQ11": 2834.40}
+
+
+def drawdown(close: pd.Series, prior_peak: float = 0) -> pd.Series:
     """사상 최고 종가 대비 하락률(%). 0 = 신고가."""
-    return (close / close.cummax() - 1) * 100
+    return (close / close.cummax().clip(lower=prior_peak) - 1) * 100
+
+
+MDD_YEARS = 20  # 장기 흐름을 보려고 20년치 저장 (최근 3년은 일별, 그 전은 주별 마지막 날)
 
 
 def collect_mdd(start: dt.date) -> None:
+    today = dt.date.today()
+    since, daily_since = today - dt.timedelta(days=365 * MDD_YEARS + 5), today - dt.timedelta(days=1100)
     for series_id, name, symbol, country in MDD_INDEXES:
         # 고점은 전체 이력에서 찾아야 해서 상장 이후 전부 받음
         df = yf.Ticker(symbol).history(period="max", auto_adjust=False)
         if df.empty:
             raise RuntimeError(f"Yahoo {symbol} 데이터 없음")
         close = df["Close"].dropna()
+        close = close[close > 0]
         close.index = close.index.date
-        dd = drawdown(close)
-        dd = dd[dd.index >= start]
-        print(f"[MDD] {name}: 최고 {close.max():.2f}({close.idxmax()}), 현재 {dd.iloc[-1]:.1f}%, 기간 최저 {dd.min():.1f}%")
+        dd = drawdown(close, PRIOR_PEAK.get(symbol, 0))
+        dd = dd[dd.index >= since]
+        old = dd[dd.index < daily_since]
+        week = pd.Series(["%d-%02d" % d.isocalendar()[:2] for d in old.index], index=old.index)
+        old = old[~week.duplicated(keep="last")]  # 주마다 마지막 거래일
+        dd = pd.concat([old, dd[dd.index >= daily_since]])
+        print(f"[MDD] {name}: Yahoo 이력 {close.index[0]}~, 최고 {max(close.max(), PRIOR_PEAK.get(symbol, 0)):.2f}, 현재 {dd.iloc[-1]:.1f}%, 20년 최저 {dd.min():.1f}%({dd.idxmin()}), {len(dd)}개")
         _save(series_id, f"{name} 고점 대비 하락률(MDD)", "%", country, {d.isoformat(): round(float(v), 2) for d, v in dd.items()})
 
 
