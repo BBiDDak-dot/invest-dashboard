@@ -2,6 +2,8 @@ import { num } from "@/lib/format";
 import { isFearGreed, type MacroRow } from "@/lib/queries";
 import { Empty } from "./Card";
 import { LineChart } from "./LineChart";
+import { getTrend } from "@/lib/trend";
+import { TrendNote } from "./TrendNote";
 
 // 투자 지표: 지표마다 축이 있는 큰 선 그래프, 2열 배치
 export function MacroGrid({ rows }: { rows: MacroRow[] }) {
@@ -11,6 +13,7 @@ export function MacroGrid({ rows }: { rows: MacroRow[] }) {
       {rows.map((s) => {
         const last = s.history.at(-1);
         const first = s.history[0];
+        const trend = getTrend(s.series_id, s.history);
         return (
           <div key={s.series_id} className="rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
             <div className="flex items-baseline justify-between gap-2">
@@ -32,6 +35,7 @@ export function MacroGrid({ rows }: { rows: MacroRow[] }) {
               decimals={2}
               domain={isFearGreed(s.series_id) ? [0, 100] : undefined}
             />
+            {trend && <TrendNote trend={trend} unit={s.unit} />}
           </div>
         );
       })}
