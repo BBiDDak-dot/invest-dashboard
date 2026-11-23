@@ -129,18 +129,34 @@ def drawdown(close: pd.Series) -> pd.Series:
     return (close / close.cummax() - 1) * 100
 
 
+MDD_YEARS = 20  # 장기 흐름을 보려고 20년치 저장 (최근 3년은 일별, 그 전은 주별 마지막 날)
+
+
 def collect_mdd(start: dt.date) -> None:
+    today = dt.date.today()
+    since, daily_since = today - dt.timedelta(days=365 * MDD_YEARS + 5), today - dt.timedelta(days=1100)
     for series_id, name, symbol, country in MDD_INDEXES:
         # 고점은 전체 이력에서 찾아야 해서 상장 이후 전부 받음
         df = yf.Ticker(symbol).history(period="max", auto_adjust=False)
         if df.empty:
             raise RuntimeError(f"Yahoo {symbol} 데이터 없음")
         close = df["Close"].dropna()
+        close = close[close > 0]
         close.index = close.index.date
         dd = drawdown(close)
-        dd = dd[dd.index >= start]
-        print(f"[MDD] {name}: 최고 {close.max():.2f}({close.idxmax()}), 현재 {dd.iloc[-1]:.1f}%, 기간 최저 {dd.min():.1f}%")
+        dd = dd[dd.index >= since]
+        old = dd[dd.index < daily_since]
+        old = old.groupby([d.isocalendar()[:2] for d in old.index]).tail(1)  # 주마다 마지막 거래일
+        dd = pd.concat([old, dd[dd.index >= daily_since]])
+        print(f"[MDD] {name}: Yahoo 이력 {close.index[0]}~, 최고 {close.max():.2f}({close.idxmax()}), 현재 {dd.iloc[-1]:.1f}%, 20년 최저 {dd.min():.1f}%({dd.idxmin()}), {len(dd)}개")
         _save(series_id, f"{name} 고점 대비 하락률(MDD)", "%", country, {d.isoformat(): round(float(v), 2) for d, v in dd.items()})
+        if country == "KR":  # 시험용(임시): 네이버 일봉 이력 시작일
+            import re as _re
+            x = requests.get(f"https://fchart.stock.naver.com/sise.nhn?symbol={name}&timeframe=day&count=8000&requestType=0", headers=UA, timeout=30).text
+            rows = [(m[1], float(m[2])) for m in _re.finditer(r'data="(\d{8})\|[^|]*\|[^|]*\|[^|]*\|([\d.]+)\|', x)]
+            if rows:
+                hi = max(rows, key=lambda r: r[1])
+                print(f"[MDD 점검] {name} 네이버 일봉 {len(rows)}개 {rows[0][0]}~, 최고 {hi}")
 
 
 def collect(start: dt.date) -> None:
