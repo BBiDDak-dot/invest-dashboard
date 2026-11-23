@@ -146,7 +146,8 @@ def collect_mdd(start: dt.date) -> None:
         dd = drawdown(close)
         dd = dd[dd.index >= since]
         old = dd[dd.index < daily_since]
-        old = old.groupby([d.isocalendar()[:2] for d in old.index]).tail(1)  # 주마다 마지막 거래일
+        week = pd.Series(["%d-%02d" % d.isocalendar()[:2] for d in old.index], index=old.index)
+        old = old[~week.duplicated(keep="last")]  # 주마다 마지막 거래일
         dd = pd.concat([old, dd[dd.index >= daily_since]])
         print(f"[MDD] {name}: Yahoo 이력 {close.index[0]}~, 최고 {close.max():.2f}({close.idxmax()}), 현재 {dd.iloc[-1]:.1f}%, 20년 최저 {dd.min():.1f}%({dd.idxmin()}), {len(dd)}개")
         _save(series_id, f"{name} 고점 대비 하락률(MDD)", "%", country, {d.isoformat(): round(float(v), 2) for d, v in dd.items()})

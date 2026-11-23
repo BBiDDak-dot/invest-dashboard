@@ -166,6 +166,22 @@ export async function getMacro(days = 365 * 3): Promise<MacroRow[]> {
   );
 }
 
+// 4대 지수 MDD는 장기(20년)로 봄. 3년 이전은 주별 값만 저장돼 있음
+export async function getMdd(years = 20): Promise<MacroRow[]> {
+  const series = (await select<MacroSeries>("macro_series", "select=*&series_id=like.MDD:*")).sort(
+    (a, b) => (MACRO_ORDER.indexOf(a.series_id) + 1 || 99) - (MACRO_ORDER.indexOf(b.series_id) + 1 || 99),
+  );
+  return Promise.all(
+    series.map(async (s) => ({
+      ...s,
+      history: await selectAll<MacroObservation>(
+        "macro_observations",
+        `select=series_id,date,value&series_id=eq.${encodeURIComponent(s.series_id)}&date=gte.${daysAgo(365 * years + 7)}&order=date`,
+      ),
+    })),
+  );
+}
+
 export async function getDisclosures(limit = 20, ticker?: string): Promise<Disclosure[]> {
   const filter = ticker ? `&ticker=eq.${encodeURIComponent(ticker)}` : "";
   return select<Disclosure>("disclosures", `select=*${filter}&order=date.desc&limit=${limit}`);
