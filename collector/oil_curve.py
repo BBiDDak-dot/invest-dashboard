@@ -110,9 +110,6 @@ def collect_one(root: str, name: str, unit: str, start: dt.date) -> None:
 
 
 def collect(start: dt.date) -> None:
-    # 일회용: EIA 시험으로 들어간 2024-04 이전 스프레드 삭제 (EIA는 2024-04-05에 선물 가격 공개 중단)
-    for r, *_ in PRODUCTS:
-        db.delete("macro_observations", f"series_id=eq.CURVE:{r}:M1M2&date=lt.2025-01-01")
     # 평소엔 최근 며칠만 받음(월물 수가 많아서). 이력을 처음 채울 땐 --days 1100으로 실행
     failed = []
     for root, name, unit in PRODUCTS:
