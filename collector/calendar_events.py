@@ -253,7 +253,7 @@ def kr_earnings(companies: list[tuple[str, str, str]], since: dt.date) -> tuple[
                     print(f"[일정] {name} IR 원문 실패: {e}")
                     when = None
                 if when and when[0] >= since:
-                    rows.append(_row(grp, when[0], f"{name} 실적 설명회(IR)", "실적", when[1], "DART 기업설명회 개최 공시", url, suffix="-ir"))
+                    rows.append(_row(grp, when[0], f"{name} 기업설명회(IR)", "실적", when[1], "DART 기업설명회 개최 공시", url, suffix="-ir"))
                     n += 1
             elif "잠정" in title and "실적" in title:
                 d = dt.date.fromisoformat(f"{it['rcept_dt'][:4]}-{it['rcept_dt'][4:6]}-{it['rcept_dt'][6:]}")
