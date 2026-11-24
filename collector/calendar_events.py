@@ -200,7 +200,7 @@ def _prelim_guess(rows: list[dict], grp: str, name: str) -> dict | None:
         return None
     while target.weekday() >= 5:
         target -= dt.timedelta(days=1)
-    return _row(grp, target, f"{name} 잠정실적 (예상)", "실적", None, "통상 분기 다음 달 8일 전후. 확정 공시 아님", tentative=True, suffix="-est")
+    return _row(grp, target, f"{name} 잠정실적", "실적", None, "통상 분기 다음 달 8일 전후. 확정 공시 아님", tentative=True, suffix="-est")
 
 
 def kr_earnings(companies: list[tuple[str, str, str]], since: dt.date) -> tuple[list[dict], set[str]]:

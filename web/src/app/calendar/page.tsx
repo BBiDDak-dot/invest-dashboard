@@ -102,7 +102,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
           )}
         </div>
         <p className="mt-3 text-xs text-zinc-500">
-          미국 일정은 한국 시각으로 바꿔 표시함(서머타임 반영). 미국 장 마감 후 실적은 한국 다음 날 새벽임. 흐린 일정은 예상 날짜. 마우스를 올리면 현지 시각이 보임.
+          미국 일정은 한국 시각으로 바꿔 표시함(서머타임 반영). 미국 장 마감 후 실적은 한국 다음 날 새벽임. 흐린 일정은 예상 날짜. 미국 실적일은 회사 확정 전엔 Yahoo 추정일일 수 있음. 마우스를 올리면 현지 시각이 보임.
         </p>
       </Card>
       <Card title="일정 직접 추가">
