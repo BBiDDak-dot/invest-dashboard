@@ -5,6 +5,7 @@ import datetime as dt
 import os
 import sys
 
+import calendar_events
 import cleanup
 import db
 import disclosures
@@ -60,6 +61,7 @@ def main() -> None:
         ("지수 밸류에이션", valuation.collect),
         ("PBR 밴드", pbr_band.collect),  # 시세 다음에(주가 보충)
         ("산업 클리핑", news_clips.collect),
+        ("일정", calendar_events.collect),
         ("PDF 정리", cleanup.collect),
         ("지표 점검", macro_check.collect),  # 시험용: only="지표 점검"으로 실행
     ]:

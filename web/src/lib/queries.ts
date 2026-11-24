@@ -3,6 +3,7 @@ import {
   inList,
   select,
   selectAll,
+  type CalendarEvent,
   type Disclosure,
   type EarningsReport,
   type EarningsRow,
@@ -415,4 +416,17 @@ export async function getPortfolio(): Promise<Portfolio> {
 export async function getNewsClip(id: string): Promise<NewsClip | null> {
   const [row] = await select<NewsClip>("news_clips", `select=*&id=eq.${encodeURIComponent(id)}`);
   return row ?? null;
+}
+
+// 주요 일정 (from~to, KST 날짜). 테이블이 아직 없으면 missing=true
+export async function getCalendarEvents(from: string, to: string): Promise<{ rows: CalendarEvent[]; missing: boolean }> {
+  try {
+    const rows = await select<CalendarEvent>(
+      "calendar_events",
+      `select=id,date,time_kst,category,title,note,url,tentative,source&date=gte.${from}&date=lte.${to}&order=date,time_kst.nullsfirst,title&limit=1000`,
+    );
+    return { rows, missing: false };
+  } catch {
+    return { rows: [], missing: true };
+  }
 }

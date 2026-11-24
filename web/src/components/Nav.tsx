@@ -3,6 +3,7 @@ import { logout } from "@/app/actions";
 
 const links = [
   { href: "/", label: "요약" },
+  { href: "/calendar", label: "일정" },
   { href: "/portfolio", label: "포트폴리오" },
   { href: "/watchlist", label: "관심종목" },
   { href: "/macro", label: "매크로" },
