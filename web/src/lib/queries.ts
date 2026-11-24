@@ -224,7 +224,7 @@ export async function getNewsNote(id: string): Promise<NewsNote | null> {
 }
 
 export async function getFlows(market: MarketFlow["market"], days: number): Promise<MarketFlow[]> {
-  return select<MarketFlow>("market_flows", `select=*&market=eq.${market}&date=gte.${daysAgo(days)}&order=date`);
+  return selectAll<MarketFlow>("market_flows", `select=*&market=eq.${market}&date=gte.${daysAgo(days)}&order=date`);
 }
 
 // 최근 n영업일 종목별 순매수 (영업일은 늘 수집 대상인 삼성전자 날짜로 셈)

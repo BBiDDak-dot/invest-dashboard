@@ -6,7 +6,7 @@ import type { MarketFlow, StockFlow } from "@/lib/db";
 import { changeColor, num } from "@/lib/format";
 import { getFlows, getStockFlows, getWatchItems } from "@/lib/queries";
 
-const RANGES = { "1m": ["1개월", 31], "3m": ["3개월", 92], "6m": ["6개월", 183], "1y": ["1년", 365] } as const;
+const RANGES = { "1m": ["1개월", 31], "3m": ["3개월", 92], "6m": ["6개월", 183], "1y": ["1년", 365], "2y": ["2년", 730], "3y": ["3년", 1095] } as const;
 type Range = keyof typeof RANGES;
 const TOP_DAYS = { "1": "1일", "5": "5일", "20": "20일" } as const;
 type TopDays = keyof typeof TOP_DAYS;
@@ -14,7 +14,7 @@ const WHO = { f: ["외국인", "foreigner"], i: ["기관", "institution"] } as c
 type Who = keyof typeof WHO;
 
 // 기간 시작일부터 날마다 순매수를 더한 누적값
-function cumulative(rows: MarketFlow[], key: "foreigner" | "institution") {
+function cumulative(rows: MarketFlow[], key: "individual" | "foreigner" | "institution") {
   let sum = 0;
   return rows.map((r) => (sum += r[key] ?? 0));
 }
@@ -26,6 +26,7 @@ function MarketChart({ market, rows }: { market: string; rows: MarketFlow[] }) {
       <LineChart
         labels={rows.map((r) => r.date)}
         series={[
+          { name: "개인", color: "var(--series-3)", values: cumulative(rows, "individual") },
           { name: "외국인", color: "var(--series-1)", values: cumulative(rows, "foreigner") },
           { name: "기관", color: "var(--series-2)", values: cumulative(rows, "institution") },
         ]}
