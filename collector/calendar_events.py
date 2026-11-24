@@ -236,12 +236,12 @@ def kr_earnings(companies: list[tuple[str, str, str]], since: dt.date) -> tuple[
                     print(f"[일정] {name} IR 원문 실패: {e}")
                     when = None
                 if when and when[0] >= since:
-                    rows.append(_row(grp, when[0], f"{name} 실적 설명회(IR)", "실적", when[1], "DART 기업설명회 개최 공시", url))
+                    rows.append(_row(grp, when[0], f"{name} 실적 설명회(IR)", "실적", when[1], "DART 기업설명회 개최 공시", url, suffix="-ir"))
                     n += 1
             elif "잠정" in title and "실적" in title:
                 d = dt.date.fromisoformat(f"{it['rcept_dt'][:4]}-{it['rcept_dt'][4:6]}-{it['rcept_dt'][6:]}")
                 if d >= since:
-                    rows.append(_row(grp, d, f"{name} 잠정실적 발표", "실적", None, it["report_nm"].strip(), url))
+                    rows.append(_row(grp, d, f"{name} 잠정실적 발표", "실적", None, it["report_nm"].strip(), url, suffix="-p"))
                     n += 1
         if ticker == "005930":
             g = _prelim_guess(rows, grp, name)
@@ -291,6 +291,7 @@ def collect() -> None:
     for grps, rows in batches:
         for g in grps:  # 날짜가 바뀐 일정이 남지 않게 다시 받은 묶음의 최근 일정은 지우고 새로 씀
             db.delete("calendar_events", f"grp=eq.{g}&date=gte.{since.isoformat()}")
-        db.upsert("calendar_events", rows)
+        # 같은 날 같은 종류 공시가 여러 건이면 id가 겹쳐 업서트가 500 → id 기준 하나만
+        db.upsert("calendar_events", list({r["id"]: r for r in rows}.values()))
     if errors:
         raise RuntimeError(f"일부 일정 실패: {', '.join(errors)}")
