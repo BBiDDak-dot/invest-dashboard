@@ -518,3 +518,41 @@ export async function deleteReport(id: string): Promise<ActionState> {
   revalidatePath("/reports");
   redirect("/reports");
 }
+
+// ---------- 주요 일정 ----------
+
+const CAL_CATEGORIES = ["FOMC", "경제지표", "실적", "행사", "기타"];
+
+export async function addCalendarEvent(_: ActionState, form: FormData): Promise<ActionState> {
+  return run(async () => {
+    const date = String(form.get("date") ?? "");
+    const time = String(form.get("time") ?? "");
+    const title = String(form.get("title") ?? "").trim();
+    const category = String(form.get("category") ?? "기타");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("날짜를 고를 것");
+    if (time && !/^\d{2}:\d{2}$/.test(time)) throw new Error("시각 형식이 맞지 않음");
+    if (!title) throw new Error("일정 이름을 입력할 것");
+    if (!CAL_CATEGORIES.includes(category)) throw new Error("분류가 맞지 않음");
+    await insert("calendar_events", {
+      id: `m-${crypto.randomUUID()}`,
+      date,
+      time_kst: time || null,
+      category,
+      title,
+      note: textOrNull(form.get("note")),
+      url: textOrNull(form.get("url")),
+      source: "manual",
+    });
+    revalidatePath("/", "layout");
+    return `${date} ${title} 추가함`;
+  });
+}
+
+export async function deleteCalendarEvent(id: string): Promise<ActionState> {
+  return run(async () => {
+    if (!id.startsWith("m-")) throw new Error("직접 추가한 일정만 지울 수 있음");
+    await remove("calendar_events", `id=eq.${encodeURIComponent(id)}`);
+    revalidatePath("/", "layout");
+    return "삭제함";
+  });
+}

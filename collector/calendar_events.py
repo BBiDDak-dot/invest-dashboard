@@ -284,6 +284,10 @@ def collect() -> None:
         rows, done = job()
         batches.append((done, rows))
 
+    today = dt.date.today().isoformat()
+    soon = sorted((r for _, rows in batches for r in rows if r["date"] >= today), key=lambda r: (r["date"], r["time_kst"] or ""))
+    for r in soon[:40]:  # 로그로 확인용
+        print(f"  {r['date']} {r['time_kst'] or '--:--'} [{r['category']}] {r['title']}{' (예상)' if r['tentative'] else ''} · {r['note'] or ''}")
     for grps, rows in batches:
         for g in grps:  # 날짜가 바뀐 일정이 남지 않게 다시 받은 묶음의 최근 일정은 지우고 새로 씀
             db.delete("calendar_events", f"grp=eq.{g}&date=gte.{since.isoformat()}")

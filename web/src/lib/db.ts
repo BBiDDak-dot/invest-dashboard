@@ -293,3 +293,16 @@ export type Report = {
   summary: string;
   model: string | null;
 };
+
+// 주요 일정 달력 (날짜·시각은 KST)
+export type CalendarEvent = {
+  id: string;
+  date: string;
+  time_kst: string | null;
+  category: string;
+  title: string;
+  note: string | null;
+  url: string | null;
+  tentative: boolean;
+  source: "auto" | "manual";
+};
