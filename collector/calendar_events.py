@@ -5,7 +5,7 @@
 - 미국 실적: Yahoo(yfinance) 실적 발표일. 장 전/장 마감 후 구분
 - 국내 실적: DART 기업설명회(IR) 개최 공시의 일시, 잠정실적 공시일
 - 행사: 아래 EVENTS 목록(날짜가 공식 확정된 것만 적음)
-대상 기업은 BIG_US·BIG_KR + 관심종목 ★(TOP PICK).
+대상 기업은 BIG_US·BIG_KR(주요 기업) + 관심종목 전체.
 """
 
 import datetime as dt
@@ -26,11 +26,28 @@ KST = ZoneInfo("Asia/Seoul")
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"}
 DART = "https://opendart.fss.or.kr/api"
 
+# 시장에 영향 큰 기업(빅테크·반도체·AI 인프라·주요 업종 대표주). 관심종목 전체는 따로 더함
 BIG_US = [
     ("AAPL", "애플"), ("MSFT", "마이크로소프트"), ("GOOGL", "알파벳"), ("AMZN", "아마존"),
     ("META", "메타"), ("NVDA", "엔비디아"), ("TSLA", "테슬라"), ("AVGO", "브로드컴"), ("TSM", "TSMC"),
+    # 반도체·장비
+    ("AMD", "AMD"), ("MU", "마이크론"), ("ASML", "ASML"), ("ARM", "Arm"), ("QCOM", "퀄컴"), ("INTC", "인텔"),
+    ("MRVL", "마벨"), ("AMAT", "어플라이드 머티리얼즈"), ("LRCX", "램리서치"),
+    # AI 인프라·서버·네트워크
+    ("ORCL", "오라클"), ("DELL", "델"), ("SMCI", "슈퍼마이크로"), ("ANET", "아리스타"), ("CSCO", "시스코"),
+    # 소프트웨어·플랫폼
+    ("CRM", "세일즈포스"), ("ADBE", "어도비"), ("PLTR", "팔란티어"), ("NFLX", "넷플릭스"),
+    # 업종 대표(실적 시즌 분위기)
+    ("JPM", "JP모건"), ("WMT", "월마트"), ("COST", "코스트코"), ("LLY", "일라이릴리"),
 ]
-BIG_KR = [("005930", "삼성전자", "00126380"), ("000660", "SK하이닉스", "00164779")]
+# 국내 주요 기업. DART 고유번호는 securities 테이블에서 찾음(없으면 여기 적은 값)
+BIG_KR = [
+    ("005930", "삼성전자", "00126380"), ("000660", "SK하이닉스", "00164779"),
+    ("373220", "LG에너지솔루션", None), ("207940", "삼성바이오로직스", None), ("005380", "현대차", None),
+    ("000270", "기아", None), ("066570", "LG전자", None), ("006400", "삼성SDI", None), ("009150", "삼성전기", None),
+    ("035420", "NAVER", None), ("035720", "카카오", None), ("068270", "셀트리온", None), ("105560", "KB금융", None),
+    ("012450", "한화에어로스페이스", None), ("329180", "HD현대중공업", None), ("005490", "POSCO홀딩스", None),
+]
 
 # (시작일, 끝일, 이름, 메모, 주소) — 공식 발표로 확정된 날짜만. 현지 날짜 그대로(행사는 시차 의미 적음)
 EVENTS = [
@@ -263,10 +280,19 @@ def events() -> list[dict]:
 
 def collect() -> None:
     since = dt.date.today() - dt.timedelta(days=90)
-    stars = db.select("watchlist", "select=ticker,market,name,corp_code&starred=is.true") if db.URL else []
-    us = BIG_US + [(s["ticker"], s["name"]) for s in stars if s["market"] == "US" and s["ticker"] not in {t for t, _ in BIG_US}]
-    kr = BIG_KR + [(s["ticker"], s["name"], s["corp_code"]) for s in stars
-                   if s["market"] == "KR" and s.get("corp_code") and s["ticker"] not in {t for t, _, _ in BIG_KR}]
+    # 관심종목 전체(★ 포함) + 주요 기업
+    mine = db.select("watchlist", "select=ticker,market,name,corp_code") if db.URL else []
+    codes = {}
+    if db.URL:
+        tickers = ",".join(t for t, _, c in BIG_KR if not c)
+        codes = {r["ticker"]: r["corp_code"] for r in db.select("securities", f"select=ticker,corp_code&ticker=in.({tickers})")}
+    us = BIG_US + [(s["ticker"], s["name"]) for s in mine if s["market"] == "US" and s["ticker"] not in {t for t, _ in BIG_US}]
+    kr = [(t, n, c or codes.get(t)) for t, n, c in BIG_KR if c or codes.get(t)]
+    kr += [(s["ticker"], s["name"], s["corp_code"]) for s in mine
+           if s["market"] == "KR" and s.get("corp_code") and s["ticker"] not in {t for t, _, _ in BIG_KR}]
+    missing = [n for t, n, c in BIG_KR if not (c or codes.get(t))]
+    if missing:
+        print(f"[일정] DART 고유번호 없음: {', '.join(missing)}")
 
     batches: list[tuple[set[str], list[dict]]] = []
     errors = []
