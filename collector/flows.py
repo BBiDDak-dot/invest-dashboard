@@ -10,7 +10,7 @@ import db
 URL = "https://m.stock.naver.com/api/index/{market}/trend"
 HEADERS = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"}
 MARKETS = ["KOSPI", "KOSDAQ"]
-BACKFILL_DAYS = 400  # 처음 실행 시 채울 기간
+BACKFILL_DAYS = 3 * 365 + 10  # 화면 최대 기간(3년)만큼 과거를 채워 둠
 
 
 def _num(s) -> float | None:
@@ -39,8 +39,13 @@ def _fetch(market: str, day: dt.date) -> dict | None:
 
 
 def collect(start: dt.date) -> None:
-    if db.URL and not db.select("market_flows", "select=date&limit=1"):
-        start = min(start, dt.date.today() - dt.timedelta(days=BACKFILL_DAYS))
+    # 저장된 가장 오래된 날짜가 3년 전보다 늦으면 그 앞을 채움(처음 실행·기간 연장 모두)
+    if db.URL:
+        first = db.select("market_flows", "select=date&order=date&limit=1")
+        oldest = dt.date.fromisoformat(first[0]["date"]) if first else dt.date.today()
+        backfill = dt.date.today() - dt.timedelta(days=BACKFILL_DAYS)
+        if oldest - backfill > dt.timedelta(days=7):
+            start = min(start, backfill)
     for market in MARKETS:
         rows = {}
         day = start
