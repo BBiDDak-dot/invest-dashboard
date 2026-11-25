@@ -8,7 +8,7 @@ import { changeColor, kstToday, num, pct } from "@/lib/format";
 import { StockSearch } from "@/components/StockSearch";
 import { getCashFlows, getFeeRates, getPension, getPortfolio, getSnapshots, getTrades, type Holding, type WatchRow } from "@/lib/queries";
 import { PensionSection } from "@/components/PensionSection";
-import { buildLedger, yearlyReturns } from "@/lib/trades";
+import { buildLedger, growthSeries, withLive, yearlyReturns } from "@/lib/trades";
 import { LineChart } from "@/components/LineChart";
 import { TradeJournal } from "@/components/TradeJournal";
 import { CashForm, HoldingForm } from "./HoldingForms";
@@ -272,8 +272,10 @@ export default async function PortfolioPage() {
   const reached = holdings.filter((h) => h.upside != null && h.upside <= 0);
   const today = kstToday();
   const ytd = yearlyReturns(snapshots, flows, total, today).find((y) => y.live);
-  // 자산 변동: 매 수집 때 기록된 순자산 + 지금 순자산(실시간). 단위 만원
-  const trend = [...snapshots.filter((s) => s.snap_date < today), { snap_date: today, net_worth: total }];
+  // 자산 변동: 매 수집 때 기록된 순자산 + 지금 순자산(실시간). 원금선·누적 수익률로 입출금 효과를 따로 보여줌
+  const trend = growthSeries(withLive(snapshots, total, today), flows);
+  const man = (v: number) => Math.round(v / 10_000);
+  const lastTrend = trend.at(-1);
   return (
     <>
       <SetupNotice />
@@ -302,19 +304,33 @@ export default async function PortfolioPage() {
         </p>
       )}
 
-      <Card title="자산 변동 (일반 계좌 순자산, 만원)">
+      <Card title="자산 변동 (일반 계좌, 만원)">
         {trend.length < 2 ? (
           <p className="py-6 text-center text-sm text-zinc-500">순자산 기록이 쌓이면 표시됨. 매 수집(평일 16:40·06:30) 때 자동 기록됨.</p>
         ) : (
-          <LineChart
-            labels={trend.map((s) => s.snap_date)}
-            series={[{ name: "순자산", color: "var(--series-1)", values: trend.map((s) => Math.round(Number(s.net_worth) / 10_000)) }]}
-            height={240}
-            decimals={0}
-          />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div>
+              <div className="mb-1 text-xs text-zinc-500">순자산과 원금 (두 선의 차이 = 운용 손익)</div>
+              <LineChart
+                labels={trend.map((p) => p.date)}
+                series={[
+                  { name: "순자산", color: "var(--series-1)", values: trend.map((p) => man(p.netWorth)) },
+                  { name: "원금(첫 기록+순입금)", color: "var(--series-2)", values: trend.map((p) => man(p.invested)) },
+                ]}
+                height={240}
+                decimals={0}
+              />
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-zinc-500">
+                누적 수익률 (입출금 제외, %){lastTrend && <span className={`ml-1 font-medium ${changeColor(lastTrend.returnPct)}`}>{pct(lastTrend.returnPct)}</span>}
+              </div>
+              <LineChart labels={trend.map((p) => p.date)} series={[{ name: "누적 수익률", color: "var(--series-1)", values: trend.map((p) => Number(p.returnPct.toFixed(2))) }]} height={240} decimals={2} />
+            </div>
+          </div>
         )}
         <p className="mt-2 text-xs text-zinc-500">
-          주식+현금 합계. 입금·출금도 그대로 반영되므로 순수 운용 성과는 YTD 수익률을 볼 것. 퇴직연금은 빠짐.
+          {trend[0]?.date.slice(5)}부터. 원금 = 첫 기록 순자산 + 이후 순입금(입금−출금). 누적 수익률은 기록 구간마다 입출금을 빼고 곱해 나간 시간가중 수익률(TWR)이라 입금·출금으로 오르내리지 않음. 퇴직연금은 빠짐.
         </p>
       </Card>
 
@@ -331,6 +347,9 @@ export default async function PortfolioPage() {
             <span className="text-zinc-500">현금</span>
             <CashForm cash={cash} />
           </div>
+          <p className="mt-1.5 text-xs text-zinc-500">
+            여기서 현금을 고치면 수익률엔 손익으로 잡힘. 입금·출금은 아래 매매 일지의 &quot;현금 입금·출금&quot;으로 기록할 것.
+          </p>
         </Card>
         <Card title="섹터 비중 (순자산 대비)">
           <SectorBars rows={holdings} total={total} />

@@ -97,9 +97,9 @@ export function estimateFee(market: "KR" | "US", side: "buy" | "sell", price: nu
   return Math.round(gross * rates.us) / 100;
 }
 
-// 연도별 수익률 (수정 디에츠): 전년 마지막 순자산을 기준으로, 그해 입금·출금은 남은 기간 비율만큼 원금에 더함.
-// 수익률 = (기말 − 기초 − 순입금) / (기초 + Σ 입출금 × 남은 기간 비율). 입출금 효과를 빼고 운용 성과만 봄.
-// 전년 기록이 없는 첫해(2026)는 그해 첫 순자산 기록을 기초로 씀(partial).
+// 수익률은 시간가중(TWR): 순자산 기록 사이 구간마다 수익률을 구해 곱해 나감. 구간 안 입금·출금은 절반만 원금에 더함
+// (구간 수익률 = (기말 − 기초 − 입출금) / (기초 + 입출금/2)). 입출금 규모·시점과 무관하게 운용 성과만 봄.
+// 입출금은 flow_date 기준으로 그날 기록 구간에 넣음.
 export const RETURN_FIRST_YEAR = 2026;
 export type Snapshot = { snap_date: string; net_worth: number };
 export type YearReturn = {
@@ -115,29 +115,62 @@ export type YearReturn = {
   partial: boolean; // 기초가 전년 말이 아니라 그해 첫 기록
 };
 
-const days = (a: string, b: string) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
+// 순자산 기록 + 오늘 실시간 순자산 (오늘 기록은 실시간 값으로 대체)
+export function withLive(snapshots: Snapshot[], netWorth: number, today: string): Snapshot[] {
+  const snaps = snapshots.filter((s) => s.snap_date < today).sort((a, b) => a.snap_date.localeCompare(b.snap_date));
+  return [...snaps, { snap_date: today, net_worth: netWorth }];
+}
+
+export type GrowthPoint = { date: string; netWorth: number; invested: number; netFlow: number; returnPct: number };
+
+// 자산 변동 그래프용: 시점별 순자산, 원금(첫 기록 순자산 + 이후 순입금), 첫 기록부터 누적 TWR(%)
+export function growthSeries(points: Snapshot[], flows: CashFlow[]): GrowthPoint[] {
+  if (!points.length) return [];
+  const out: GrowthPoint[] = [];
+  let index = 1;
+  let netFlow = 0;
+  const first = Number(points[0].net_worth);
+  points.forEach((p, i) => {
+    const v1 = Number(p.net_worth);
+    if (i > 0) {
+      const prev = points[i - 1];
+      const v0 = Number(prev.net_worth);
+      const f = flows.filter((x) => x.flow_date > prev.snap_date && x.flow_date <= p.snap_date).reduce((s, x) => s + flowDelta(x), 0);
+      const denom = v0 + f / 2;
+      if (denom > 0) index *= 1 + (v1 - v0 - f) / denom;
+      netFlow += f;
+    }
+    out.push({ date: p.snap_date, netWorth: v1, invested: first + netFlow, netFlow, returnPct: (index - 1) * 100 });
+  });
+  return out;
+}
 
 export function yearlyReturns(snapshots: Snapshot[], flows: CashFlow[], netWorth: number, today: string): YearReturn[] {
-  const snaps = [...snapshots].sort((a, b) => a.snap_date.localeCompare(b.snap_date));
-  const lastBefore = (date: string) => snaps.filter((s) => s.snap_date < date).at(-1);
+  const points = withLive(snapshots, netWorth, today);
   const out: YearReturn[] = [];
   const thisYear = Number(today.slice(0, 4));
   for (let year = RETURN_FIRST_YEAR; year <= thisYear; year++) {
-    const prior = lastBefore(`${year}-01-01`);
-    const base = prior ?? snaps.find((s) => s.snap_date.startsWith(`${year}-`));
-    if (!base) continue;
-    const live = year === thisYear;
-    const close = live ? { snap_date: today, net_worth: netWorth } : lastBefore(`${year + 1}-01-01`);
-    if (!close || close.snap_date <= base.snap_date) continue;
-    const span = days(base.snap_date, close.snap_date);
-    const inYear = flows.filter((f) => f.flow_date > base.snap_date && f.flow_date <= close.snap_date);
-    const netFlow = inYear.reduce((s, f) => s + flowDelta(f), 0);
-    const weighted = inYear.reduce((s, f) => s + flowDelta(f) * (days(f.flow_date, close.snap_date) / span), 0);
+    const prior = points.filter((s) => s.snap_date < `${year}-01-01`).at(-1);
+    const inYear = points.filter((s) => s.snap_date.startsWith(`${year}-`));
+    const span = prior ? [prior, ...inYear] : inYear;
+    if (span.length < 2) continue;
+    const g = growthSeries(span, flows).at(-1)!;
+    const base = span[0];
+    const close = span.at(-1)!;
     const start = Number(base.net_worth);
     const end = Number(close.net_worth);
-    const gain = end - start - netFlow;
-    const denom = start + weighted;
-    out.push({ year, start, startDate: base.snap_date, end, endDate: close.snap_date, netFlow, gain, returnPct: denom > 0 ? (gain / denom) * 100 : null, live, partial: !prior });
+    out.push({
+      year,
+      start,
+      startDate: base.snap_date,
+      end,
+      endDate: close.snap_date,
+      netFlow: g.netFlow,
+      gain: end - start - g.netFlow,
+      returnPct: g.returnPct,
+      live: year === thisYear,
+      partial: !prior,
+    });
   }
   return out.reverse();
 }
