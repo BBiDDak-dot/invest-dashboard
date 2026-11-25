@@ -14,6 +14,7 @@ import earnings
 import exports
 import financials
 import flows
+import freight
 import stock_flows
 import us_earnings
 import macro
@@ -33,7 +34,7 @@ SAMPLE_WATCHLIST = [
 ]
 
 
-ON_DEMAND = {"지표 점검", "공포탐욕 비교", "수출 품목 점검"}  # 정기 수집에선 빼고 only로 부를 때만 실행
+ON_DEMAND = {"지표 점검", "공포탐욕 비교", "수출 품목 점검", "운임 점검"}  # 정기 수집에선 빼고 only로 부를 때만 실행
 
 
 def main() -> None:
@@ -70,6 +71,7 @@ def main() -> None:
         ("PDF 정리", cleanup.collect),
         ("지표 점검", macro_check.collect),  # 시험용: only="지표 점검"으로 실행
         ("공포탐욕 비교", sentiment.compare),
+        ("운임 점검", freight.check),  # 시험용: 운임 출처 접속 확인
         ("수출 품목 점검", exports.check),  # 시험용: HS코드 아래 품목명 출력  # 시험용: 예전·새 공포탐욕 계산을 출력만 함
     ]:
         if (only and name not in only) or (not only and name in ON_DEMAND):
