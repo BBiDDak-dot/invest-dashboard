@@ -30,7 +30,7 @@ export function PbrBandPlot({ labels, series, name }: { labels: string[]; series
       <LineChart
         labels={labels}
         series={series}
-        height={280}
+        height={460}
         decimals={0}
         onHoverIndex={setSel}
         onPick={(i, type) => {
