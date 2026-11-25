@@ -21,6 +21,7 @@ import oil_curve
 import pbr_band
 import prices
 import valuation
+import sentiment
 import snapshot
 
 # DB 미연결(dry run) 시 사용할 예시 종목
@@ -30,7 +31,7 @@ SAMPLE_WATCHLIST = [
 ]
 
 
-ON_DEMAND = {"지표 점검"}  # 정기 수집에선 빼고 only로 부를 때만 실행
+ON_DEMAND = {"지표 점검", "공포탐욕 비교"}  # 정기 수집에선 빼고 only로 부를 때만 실행
 
 
 def main() -> None:
@@ -64,6 +65,7 @@ def main() -> None:
         ("일정", calendar_events.collect),
         ("PDF 정리", cleanup.collect),
         ("지표 점검", macro_check.collect),  # 시험용: only="지표 점검"으로 실행
+        ("공포탐욕 비교", sentiment.compare),  # 시험용: 예전·새 공포탐욕 계산을 출력만 함
     ]:
         if (only and name not in only) or (not only and name in ON_DEMAND):
             continue
