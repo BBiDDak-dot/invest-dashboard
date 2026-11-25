@@ -11,7 +11,7 @@ import calendar
 import datetime as dt
 import os
 import re
-import statistics
+import math
 
 import requests
 from bs4 import BeautifulSoup
@@ -199,7 +199,10 @@ def _dart_history(w: dict, recent: list[dict], verbose: bool) -> list[dict]:
         print(f"{w['ticker']} DART BPS {[(r['fy_end'][:4], round(r['bps'])) for r in out]} 와이즈 대비 {[round(x, 3) for x in ratios]}")
     if not ratios:
         return []
-    k = statistics.median(ratios)
+    # 겹치는 해 중 1에 가장 가까운 비율을 씀(DART 한 해가 단위 오기로 1000배 튀는 경우가 있음)
+    k = min(ratios, key=lambda x: abs(math.log(x)) if x > 0 else 99)
+    # 겹치지 않는 해도 단위 오기(앞뒤 해의 50배 이상 차이)면 뺌
+    out = [r for i, r in enumerate(out) if all(0.02 < r["bps"] / n["bps"] < 50 for n in out[max(0, i - 1):i + 2] if n is not r and n["bps"] > 0)]
     if not 0.7 <= k <= 1.4:  # 정의 차이로 보기엔 너무 큼(분할 반영 누락 등) → 안 씀
         print(f"{w['ticker']} {w['name']} DART BPS가 와이즈리포트와 {k:.2f}배 차이 → 과거 BPS 안 씀")
         return []
