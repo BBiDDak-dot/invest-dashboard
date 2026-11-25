@@ -20,6 +20,7 @@ import news_clips
 import oil_curve
 import pbr_band
 import prices
+import probe
 import valuation
 import snapshot
 
@@ -30,7 +31,7 @@ SAMPLE_WATCHLIST = [
 ]
 
 
-ON_DEMAND = {"지표 점검"}  # 정기 수집에선 빼고 only로 부를 때만 실행
+ON_DEMAND = {"지표 점검", "조사"}  # 정기 수집에선 빼고 only로 부를 때만 실행
 
 
 def main() -> None:
@@ -64,6 +65,7 @@ def main() -> None:
         ("일정", calendar_events.collect),
         ("PDF 정리", cleanup.collect),
         ("지표 점검", macro_check.collect),  # 시험용: only="지표 점검"으로 실행
+        ("조사", probe.collect),
     ]:
         if (only and name not in only) or (not only and name in ON_DEMAND):
             continue
