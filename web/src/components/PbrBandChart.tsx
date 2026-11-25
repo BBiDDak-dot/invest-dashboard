@@ -1,11 +1,11 @@
-import { LineChart } from "@/components/LineChart";
+import { PbrBandPlot } from "@/components/PbrBandPlot";
 import { num } from "@/lib/format";
 import type { PbrBand } from "@/lib/pbrBand";
 
 // 밴드 선은 낮은 배수→높은 배수로 점점 진해지는 회청색, 주가는 주황으로 구분
 const BAND_COLORS = ["#b8c4d6", "#93a5c0", "#6e86aa", "#4a6894", "#26497e"];
 
-export function PbrBandChart({ band }: { band: PbrBand | null }) {
+export function PbrBandChart({ band, name }: { band: PbrBand | null; name: string }) {
   if (!band || !band.stats || band.multiples.length === 0) {
     return (
       <p className="py-4 text-sm text-zinc-500">
@@ -32,8 +32,8 @@ export function PbrBandChart({ band }: { band: PbrBand | null }) {
       <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
         {[
           [`현재 ${label} PBR`, current ? `${num(current.pbr, 2)}x` : "-"],
-          ["5년 위치", current ? `하위 ${num(current.percentile, 0)}%` : "-"],
-          ["5년 평균 / 범위", `${num(stats.avg, 2)}x · ${num(stats.min, 2)}~${num(stats.max, 2)}`],
+          [`${band.years}년 위치`, current ? `하위 ${num(current.percentile, 0)}%` : "-"],
+          [`${band.years}년 평균 / 범위`, `${num(stats.avg, 2)}x · ${num(stats.min, 2)}~${num(stats.max, 2)}`],
           [`${label} BPS`, current ? `${num(current.bps, 0)}원` : "-"],
         ].map(([k, v]) => (
           <div key={k} className="rounded-md bg-zinc-50 p-2.5 dark:bg-zinc-900">
@@ -42,7 +42,7 @@ export function PbrBandChart({ band }: { band: PbrBand | null }) {
           </div>
         ))}
       </div>
-      <LineChart labels={band.labels} series={series} height={280} decimals={0} />
+      <PbrBandPlot labels={band.labels} series={series} name={name} />
       <p className="text-xs leading-relaxed text-zinc-500">
         {fwd ? (
           <>
@@ -55,6 +55,8 @@ export function PbrBandChart({ band }: { band: PbrBand | null }) {
         )}
         {" · 출처 "}
         {band.bps.at(-1)?.source === "naver" ? "네이버 증권" : "네이버 증권 기업정보(와이즈리포트)"}
+        {band.bps.some((b) => b.source === "dart") &&
+          `, ${band.bps.filter((b) => b.source === "dart").map((b) => b.fy_end.slice(0, 4)).join("·").replace(/^(\d{4}).*·(\d{4})$/, "$1~$2")}년은 DART 사업보고서(지배주주 자본÷유통주식수, 분할 수정)`}
         {updated && `, ${updated} 수집`}.
       </p>
     </div>
