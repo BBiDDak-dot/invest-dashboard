@@ -8,6 +8,7 @@ const links = [
   { href: "/watchlist", label: "관심종목" },
   { href: "/macro", label: "매크로" },
   { href: "/energy", label: "에너지" },
+  { href: "/ai", label: "AI" },
   { href: "/sentiment", label: "심리" },
   { href: "/flows", label: "수급" },
   { href: "/news", label: "뉴스" },

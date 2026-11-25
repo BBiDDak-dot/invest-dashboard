@@ -108,7 +108,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       <Card title="일정 직접 추가">
         <CalendarForm today={today} />
         <p className="mt-2 text-xs text-zinc-500">
-          자동 수집: FOMC, 미국 CPI·고용보고서, M7·브로드컴·TSMC·삼성전자·SK하이닉스와 ★ TOP PICK 종목 실적, CES. 그 밖의 행사는 여기서 추가함(직접 추가한 일정만 × 로 삭제 가능).
+          자동 수집: FOMC, 미국 CPI·고용보고서, 주요 기업(M7·반도체·AI 인프라·델·오라클 등 미국 31곳, 삼성전자·SK하이닉스 등 국내 16곳)과 관심종목 전체 실적, CES. 그 밖의 행사는 여기서 추가함(직접 추가한 일정만 × 로 삭제 가능).
         </p>
       </Card>
     </>
