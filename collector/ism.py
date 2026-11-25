@@ -51,5 +51,26 @@ def collect(start: dt.date) -> None:
             break
     if not rows:
         raise RuntimeError("ISM 발표문을 찾지 못함 (페이지 구조 변경 가능성)")
+    latest = max(rows)
+    print(f"[ISM] 최근 값 {', '.join(f'{d[:7]}={rows[d]['value']}' for d in sorted(rows)[-3:])} (발표 기준 최신 {expected_month()[:7]})")
     db.upsert("macro_series", [{"series_id": SERIES_ID, "source": "ISM", "name": "ISM 제조업 PMI", "unit": "pt", "country": "US"}])
     db.upsert("macro_observations", [r for r in rows.values() if r["date"] >= start.replace(day=1).isoformat()])
+    if latest < expected_month():  # 발표일이 지났는데 목록에 없으면 실패로 알림 (조용히 멈추지 않게)
+        raise RuntimeError(f"ISM {expected_month()[:7]} 발표분이 목록에 없음 (마지막 {latest[:7]})")
+
+
+def release_day(ref_month: dt.date) -> dt.date:
+    """ref_month분 발표일: 다음 달 첫 영업일(주말·1월 1일 제외), 미국 동부 10시."""
+    d = (ref_month.replace(day=28) + dt.timedelta(days=4)).replace(day=1)
+    while d.weekday() >= 5 or (d.month == 1 and d.day == 1):
+        d += dt.timedelta(days=1)
+    return d
+
+
+def expected_month(today: dt.date | None = None) -> str:
+    """오늘 기준으로 이미 발표됐어야 하는 가장 최근 달 (발표 다음 날부터 기대, 한국 시간 수집 시차 고려)."""
+    today = today or dt.date.today()
+    prev = (today.replace(day=1) - dt.timedelta(days=1)).replace(day=1)
+    if today > release_day(prev):
+        return prev.isoformat()
+    return (prev - dt.timedelta(days=1)).replace(day=1).isoformat()

@@ -19,6 +19,7 @@ Trailing(직전 실적 기준) PER·PBR:
 import datetime as dt
 import io
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
@@ -257,7 +258,14 @@ def collect_ndx() -> None:
 
 def _multpl(path: str) -> dict[str, float]:
     """multpl 표 {날짜: 값}. 맨 위 행은 오늘 추정치(†)."""
-    t = requests.get(f"https://www.multpl.com/{path}", headers=UA, timeout=30).text
+    for attempt in range(3):  # multpl은 가끔 접속을 거부함(Connection refused) → 잠깐 쉬고 다시
+        try:
+            t = requests.get(f"https://www.multpl.com/{path}", headers=UA, timeout=30).text
+            break
+        except requests.ConnectionError:
+            if attempt == 2:
+                raise
+            time.sleep(20 * (attempt + 1))
     since = (dt.date.today() - dt.timedelta(days=HISTORY_DAYS)).isoformat()
     out = {}
     for day, v in re.findall(r"<td>\s*([A-Z][a-z]{2} \d{1,2}, \d{4})\s*</td>\s*<td>\s*(?:<abbr[^>]*>[^<]*</abbr>|&#x2002;)?\s*([\d.]+)", t):
@@ -290,6 +298,14 @@ def collect_us_trailing() -> None:
     _save(NDX_TPER, "NASDAQ 100 Trailing PER (worldperatio)", "US", ndx)
 
 
+def _fresh(series_id: str, days: int) -> bool:
+    """최근 days일 안에 저장된 값이 있으면 True (월별 출처가 하루 막혀도 화면엔 지장 없음)."""
+    if not db.URL:
+        return False
+    since = (dt.date.today() - dt.timedelta(days=days)).isoformat()
+    return bool(db.select("macro_observations", f"select=date&series_id=eq.{series_id}&date=gte.{since}&limit=1"))
+
+
 def collect() -> None:
     failed = []
     for name, job in [("국내", collect_kr), ("S&P 500", collect_spx), ("NASDAQ 100", collect_ndx), ("미국 Trailing", collect_us_trailing)]:
@@ -297,6 +313,10 @@ def collect() -> None:
             job()
         except Exception as e:
             print(f"[밸류에이션 {name}] 실패: {e}")
+            # 미국 Trailing은 월별 자료라 최근 45일 안 값이 있으면 일시 장애로 보고 실패 처리 안 함
+            if name == "미국 Trailing" and isinstance(e, requests.ConnectionError) and _fresh(SPX_TPER, 45):
+                print("[밸류에이션 미국 Trailing] 접속 장애로 이번엔 건너뜀 (최근 값 있음)")
+                continue
             failed.append(name)
     if failed:
         raise RuntimeError(f"실패: {', '.join(failed)}")
