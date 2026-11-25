@@ -145,7 +145,8 @@ def collect_capex() -> None:
     total: dict[str, float] = defaultdict(float)
     count: dict[str, int] = defaultdict(int)
     for ticker, cik, name in CAPEX_COS:
-        r = requests.get(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json", headers=SEC_HEADERS, timeout=60)
+        print(f"[CAPEX] {ticker} 받는 중", flush=True)
+        r = requests.get(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json", headers=SEC_HEADERS, timeout=(10, 60))
         r.raise_for_status()
         gaap = r.json()["facts"].get("us-gaap", {})
         q: dict[dt.date, float] = {}
@@ -172,7 +173,7 @@ def collect_capex() -> None:
 
 def _mops_month(y: int, m: int) -> tuple[float, float] | None:
     """(당월 매출, 전년 같은 달 매출) 천 대만달러"""
-    r = requests.get(MOPS_URL.format(roc=y - 1911, m=m), headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+    r = requests.get(MOPS_URL.format(roc=y - 1911, m=m), headers={"User-Agent": "Mozilla/5.0"}, timeout=(10, 15))
     if r.status_code != 200:
         print(f"MOPS {y}-{m:02d}: HTTP {r.status_code}", flush=True)
         return None
@@ -206,9 +207,10 @@ def collect_tsmc() -> None:
             got = None
         if not got:
             misses += 1
-            if misses >= 3 and not rev:  # 처음부터 계속 실패하면 접속 문제로 보고 그만
+            if misses >= 3:  # 연달아 실패하면 접속 문제로 보고 그만
                 break
             continue
+        misses = 0
         rev[key] = got[0] / 1e6  # 천 대만달러 → 십억 대만달러
         if got[1]:
             yoy[key] = (got[0] / got[1] - 1) * 100
@@ -222,6 +224,7 @@ def collect_tsmc() -> None:
 def collect() -> None:
     failed = []
     for name, job in [("OpenRouter", collect_openrouter), ("CAPEX", collect_capex), ("TSMC", collect_tsmc)]:
+        print(f"[AI 지표 {name}] 시작", flush=True)
         try:
             job()
         except Exception as e:

@@ -34,7 +34,8 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  # 없으면 산업 클리핑은 키워드 규칙으로 분류
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}  # 없으면 OpenRouter 토큰 지표만 건너뜀
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          PYTHONUNBUFFERED: "1"  # 로그가 바로 보이게  # 없으면 OpenRouter 토큰 지표만 건너뜀
       - run: python notify.py  # 내 종목 공시·실적 스크리닝 새 종목을 텔레그램으로
         if: always() && !github.event.inputs.only
         env:
