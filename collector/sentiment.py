@@ -60,12 +60,17 @@ def collect_cnn(start: dt.date) -> None:
     _save(CNN_ID, "미국 공포탐욕지수 (CNN, S&P 500 기준)", "점", "US", points)
 
 
-Z_WINDOW, Z_MIN = 756, 252  # 각 항목을 최근 3년 평균·표준편차 기준으로 비교 (이력이 짧으면 1년부터)
+Z_WINDOW, Z_MIN = 756, 252  # 각 항목을 최근 3년과 비교 (이력이 짧으면 1년부터)
+
+
+def _rank(x: pd.Series, window: int = Z_WINDOW) -> pd.Series:
+    # 오늘 값이 최근 기간 값 중 몇 %보다 큰지 (0~100)
+    return x.rolling(window, min(Z_MIN, window)).apply(lambda v: (v[:-1] < v[-1]).mean() * 100, raw=True)
 
 
 def _z(x: pd.Series) -> pd.Series:
-    # 평소보다 얼마나 벗어났는지(표준편차 몇 배). 극단값 하나가 전체를 끌지 않게 ±3에서 자름
-    m, sd = x.rolling(Z_WINDOW, Z_MIN).mean(), x.rolling(Z_WINDOW, Z_MIN).std()
+    # 평소(최근 3년 중앙값)보다 표준편차 몇 배 벗어났는지. 극단값 하나가 전체를 끌지 않게 ±3에서 자름
+    m, sd = x.rolling(Z_WINDOW, Z_MIN).median(), x.rolling(Z_WINDOW, Z_MIN).std()
     return ((x - m) / sd).clip(-3, 3)
 
 
@@ -87,17 +92,22 @@ def price_parts(close: pd.Series, vol: pd.Series, bond: pd.Series | None) -> dic
     return parts
 
 
-def fear_greed(parts: dict[str, pd.Series], min_parts: int = 3) -> pd.Series:
-    """CNN 방식: 항목마다 평소 대비 벗어난 정도(z)를 구해 평균 → 0~100.
+def _combine(scores: pd.DataFrame, min_parts: int) -> pd.Series:
+    return scores.mean(axis=1).where(scores.notna().sum(axis=1) >= min_parts).dropna()
 
-    항목들이 서로 겹쳐(모두 주가 흐름) 평균하면 50 근처로 몰리므로,
-    평균 z를 그 자체의 3년 표준편차로 나눠 원래 크기로 되돌린 뒤 정규분포 백분위로 바꿈.
-    (±0.67σ = 25/75, 3년 중 대략 4분의 1씩이 극단 구간)
+
+def fear_greed(parts: dict[str, pd.Series], method: str = "rank3y", min_parts: int = 3) -> pd.Series:
+    """항목마다 0~100 점수로 바꿔 평균 (CNN도 항목별 점수를 같은 비중으로 평균함).
+
+    rank3y(채택): 최근 3년 중 오늘 값의 백분위. 분포가 한쪽으로 치우친 항목(급락은 짧고 상승은 긴 모멘텀 등)도 고르게 펴짐.
+    rank1y: 최근 1년 백분위(예전 기간). z: 3년 중앙값 대비 표준편차 배수를 정규분포 백분위로.
     """
-    z = pd.concat({k: _z(v) for k, v in parts.items()}, axis=1)
-    avg = z.mean(axis=1).where(z.notna().sum(axis=1) >= min_parts)
-    scale = avg.rolling(Z_WINDOW, Z_MIN).std()
-    return (_norm_cdf(avg / scale) * 100).dropna()
+    if method == "z":
+        scores = pd.concat({k: _norm_cdf(_z(v)) * 100 for k, v in parts.items()}, axis=1)
+    else:
+        w = 252 if method == "rank1y" else Z_WINDOW
+        scores = pd.concat({k: _rank(v, w) for k, v in parts.items()}, axis=1)
+    return _combine(scores, min_parts)
 
 
 def fear_greed_v1(close: pd.Series, vol: pd.Series) -> pd.Series:
@@ -235,19 +245,22 @@ def compare(_start: dt.date | None = None) -> None:
         parts = {k: v for k, v in inp.items() if not k.startswith("_")}
         old = fear_greed_v1(inp["_close"], inp["_vol"])
         old = old[old.index >= since]
-        new = fear_greed(parts)
-        new = new[new.index >= since]
+        variants = {"예전": old}
+        for m in ["rank3y", "rank1y", "z"]:
+            v = fear_greed(parts, m)
+            variants[m] = v[v.index >= since]
+        new = variants["rank3y"]
         print(f"\n== {name} (항목: {', '.join(parts)}) ==")
-        print(f"  예전: {_stats(old)}")
-        print(f"  새  : {_stats(new)}")
+        for label, sr in variants.items():
+            line = f"  {label:6s}: {_stats(sr)}"
+            if name == "S&P 500" and cnn is not None:
+                j = pd.concat([sr, cnn[cnn.index >= since]], axis=1, join="inner").dropna()
+                line += f" | CNN 대비 상관 {j.iloc[:, 0].corr(j.iloc[:, 1]):.2f}, 평균 차이 {(j.iloc[:, 0] - j.iloc[:, 1]).abs().mean():.1f}점"
+            print(line)
         if name == "S&P 500" and cnn is not None:
-            c = cnn[cnn.index >= since]
-            for label, s in [("예전", old), ("새", new)]:
-                j = pd.concat([s, c], axis=1, join="inner").dropna()
-                print(f"  CNN 대비 {label}: 상관 {j.iloc[:, 0].corr(j.iloc[:, 1]):.2f}, 평균 차이 {(j.iloc[:, 0] - j.iloc[:, 1]).abs().mean():.1f}점 ({len(j)}일)")
-            print(f"  CNN: {_stats(c)}")
+            print(f"  CNN   : {_stats(cnn[cnn.index >= since])}")
         # 항목별 현재 z (어떤 요인이 점수를 움직이는지)
-        print("  항목 z: " + ", ".join(f"{k} {_z(v).dropna().iloc[-1]:+.2f}" for k, v in parts.items() if len(_z(v).dropna())))
+        print("  항목 점수(3년 백분위): " + ", ".join(f"{k} {_rank(v).dropna().iloc[-1]:.0f}" for k, v in parts.items() if len(_rank(v).dropna())))
         # 최근 월말 값 비교
         for d in sorted({x.replace(day=1) for x in new.index})[-12:]:
             m_old, m_new = old[old.index >= d], new[new.index >= d]
