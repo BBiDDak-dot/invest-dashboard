@@ -63,7 +63,7 @@ def _or_rows() -> list[dict]:
         if r.status_code != 200:
             raise RuntimeError(f"OpenRouter {r.status_code}: {r.text[:200]}")
         data = r.json().get("data") or []
-        print(f"OpenRouter {start}~{end}: {len(data)}행")
+        print(f"OpenRouter {start}~{end}: {len(data)}행", flush=True)
         rows += data
         start = end + dt.timedelta(days=1)
     return rows
@@ -172,12 +172,14 @@ def collect_capex() -> None:
 
 def _mops_month(y: int, m: int) -> tuple[float, float] | None:
     """(당월 매출, 전년 같은 달 매출) 천 대만달러"""
-    r = requests.get(MOPS_URL.format(roc=y - 1911, m=m), headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
+    r = requests.get(MOPS_URL.format(roc=y - 1911, m=m), headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
     if r.status_code != 200:
+        print(f"MOPS {y}-{m:02d}: HTTP {r.status_code}", flush=True)
         return None
     r.encoding = "big5"
     row = re.search(r"<td[^>]*>\s*2330\s*</td>(.*?)</tr>", r.text, re.S)
     if not row:
+        print(f"MOPS {y}-{m:02d}: 2330 행 없음 ({len(r.text)}자) {r.text[:150]!r}", flush=True)
         return None
     cells = [re.sub(r"<[^>]+>|&nbsp;|,|\s", "", c) for c in re.findall(r"<td[^>]*>(.*?)</td>", row[1], re.S)]
     # [회사명, 당월, 전월, 전년 같은 달, 전월 대비%, 전년 대비%, 누적, 전년 누적, 누적 증감%, 비고]
@@ -190,15 +192,22 @@ def _mops_month(y: int, m: int) -> tuple[float, float] | None:
 def collect_tsmc() -> None:
     have = {r["date"] for r in db.select("macro_observations", "select=date&series_id=eq.AI:TSMC_REV")}
     today = dt.date.today()
-    rev, yoy = {}, {}
+    rev, yoy, misses = {}, {}, 0
     y, m = today.year, today.month
     for _ in range(TSMC_MONTHS):
         m, y = (m - 1, y) if m > 1 else (12, y - 1)
         key = dt.date(y, m, 1).isoformat()
         if key in have and len(have) > 12 and key < (today - dt.timedelta(days=70)).isoformat():
             break  # 이미 받은 과거 달 (정정은 거의 없음)
-        got = _mops_month(y, m)
+        try:
+            got = _mops_month(y, m)
+        except requests.RequestException as e:
+            print(f"MOPS {y}-{m:02d}: {e}", flush=True)
+            got = None
         if not got:
+            misses += 1
+            if misses >= 3 and not rev:  # 처음부터 계속 실패하면 접속 문제로 보고 그만
+                break
             continue
         rev[key] = got[0] / 1e6  # 천 대만달러 → 십억 대만달러
         if got[1]:
