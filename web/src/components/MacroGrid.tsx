@@ -94,6 +94,25 @@ function YieldCard({ ten, two }: { ten: MacroRow; two: MacroRow }) {
   );
 }
 
+// 월간 지표는 날짜가 "그 달 1일"로 저장돼 있어 오래된 값처럼 보임 → "10월분 · 다음 발표 12/1"로 표시
+const MONTHLY: Record<string, string> = { "ISM:MANUFACTURING_PMI": "ISM", "FRED:CPILFESL": "CPI" };
+
+// ISM은 기준 달 다음 달 첫 영업일(주말·1/1 제외)에 발표. month는 0부터라 ismRelease(y, m+1)은 m월(1부터)분의 다음 달분 발표일
+function ismRelease(year: number, month: number): Date {
+  const d = new Date(Date.UTC(year, month, 1)); // month는 0부터 셈
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6 || (d.getUTCMonth() === 0 && d.getUTCDate() === 1)) d.setUTCDate(d.getUTCDate() + 1);
+  return d;
+}
+
+function dateLabel(seriesId: string, date?: string): string | undefined {
+  if (!date || !MONTHLY[seriesId]) return date;
+  const [y, m] = date.split("-").map(Number);
+  const label = `${y}년 ${m}월분`;
+  if (MONTHLY[seriesId] === "CPI") return `${label} · 다음 달 중순 발표`;
+  const next = ismRelease(y, m + 1); // 다음 달분 발표일 (Date.UTC가 13월 이상은 다음 해로 넘김)
+  return `${label} · 다음 발표 ${next.getUTCMonth() + 1}/${next.getUTCDate()}`;
+}
+
 // 투자 지표: 지표마다 축이 있는 큰 선 그래프, 2열 배치
 export function MacroGrid({ rows }: { rows: MacroRow[] }) {
   if (rows.length === 0) return <Empty>수집된 지표가 없음. 수집기를 한 번 실행하면 표시됨.</Empty>;
@@ -112,7 +131,7 @@ export function MacroGrid({ rows }: { rows: MacroRow[] }) {
           <div key={s.series_id} className="rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
             <div className="flex items-baseline justify-between gap-2">
               <div className="text-sm font-medium">{s.name}</div>
-              <div className="text-xs text-zinc-500">{last?.date}</div>
+              <div className="text-xs text-zinc-500">{dateLabel(s.series_id, last?.date)}</div>
             </div>
             <div className="mb-2 text-xl font-semibold tabular-nums">
               {num(last?.value)} <span className="text-xs font-normal text-zinc-500">{s.unit}</span>
