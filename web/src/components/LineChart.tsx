@@ -10,6 +10,8 @@ type Props = {
   height?: number;
   decimals?: number; // 서버 컴포넌트에서 함수를 넘길 수 없어 소수 자릿수만 받음
   domain?: [number, number]; // y축 범위 고정 (예: 공포탐욕지수 0~100)
+  onHoverIndex?: (i: number) => void; // 가리키거나 탭한 시점(클라이언트 컴포넌트에서만 넘김)
+  onPick?: (i: number, pointerType: string) => void; // 클릭/탭한 시점
 };
 
 const PAD = { top: 8, right: 8, bottom: 22, left: 56 };
@@ -26,7 +28,7 @@ function ticks(min: number, max: number, count = 4) {
 }
 
 // 단일 y축 선 그래프. 마우스를 올리면 해당 시점의 값을 보여줌.
-export function LineChart({ labels, series, height = 200, decimals = 1, domain }: Props) {
+export function LineChart({ labels, series, height = 200, decimals = 1, domain, onHoverIndex, onPick }: Props) {
   const format = (v: number) => v.toLocaleString("ko-KR", { maximumFractionDigits: decimals });
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0); // 실제 폭을 잰 뒤에 그림 (휴대폰에서 화면 밖으로 넘치지 않게)
@@ -58,10 +60,15 @@ export function LineChart({ labels, series, height = 200, decimals = 1, domain }
 
   const xLabelIdx = Array.from(new Set([0, ...[1, 2, 3].map((k) => Math.round(((labels.length - 1) * k) / 4)), labels.length - 1]));
 
-  function onMove(e: React.PointerEvent<SVGRectElement>) {
+  function indexAt(e: React.PointerEvent<SVGRectElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
     const i = Math.round(((e.clientX - rect.left) / rect.width) * (labels.length - 1));
-    setHover(Math.min(labels.length - 1, Math.max(0, i)));
+    return Math.min(labels.length - 1, Math.max(0, i));
+  }
+  function onMove(e: React.PointerEvent<SVGRectElement>) {
+    const i = indexAt(e);
+    setHover(i);
+    onHoverIndex?.(i);
   }
 
   return (
@@ -120,7 +127,10 @@ export function LineChart({ labels, series, height = 200, decimals = 1, domain }
             height={h}
             fill="transparent"
             onPointerMove={onMove}
+            onPointerDown={onMove}
             onPointerLeave={() => setHover(null)}
+            onPointerUp={onPick ? (e) => onPick(indexAt(e), e.pointerType) : undefined}
+            style={onPick ? { cursor: "pointer" } : undefined}
           />
         </svg>
       )}
