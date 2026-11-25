@@ -14,6 +14,7 @@ import earnings
 import exports
 import financials
 import flows
+import freight
 import stock_flows
 import us_earnings
 import macro
@@ -57,6 +58,7 @@ def main() -> None:
         ("미국 실적", us_earnings.collect),
         ("투자지표", lambda: macro.collect(start)),
         ("유가 곡선", lambda: oil_curve.collect(start)),
+        ("해운 운임", freight.collect),
         ("순자산 기록", snapshot.collect),  # 시세·환율 다음에
         ("재무", lambda: financials.collect(watchlist)),
         ("수급", lambda: flows.collect(start)),

@@ -53,7 +53,31 @@ const tpbr: Meaning = {
   threshold: { pct: 3 },
 };
 
+const dryBulk: Meaning = {
+  up: "철광석·석탄·곡물 물동량 증가 또는 선복 부족 → 벌크 해운주 유리, 중국 원자재 수요 회복 신호로 읽히기도 함",
+  down: "원자재 물동량 둔화 또는 선박 공급 과잉 → 벌크 해운주 부담. 급락은 중국 경기 둔화 신호일 수 있음",
+  threshold: { pct: 15 },
+};
+
+const container: Meaning = {
+  up: "컨테이너 수요 증가·항로 차질(홍해 우회 등) → 컨테이너 선사 이익 증가, 수출 기업 물류비·수입 물가 부담",
+  down: "수요 둔화 또는 신조선 인도로 선복 과잉 → 선사 이익 감소, 화주(수출 기업) 물류비 절감",
+  threshold: { pct: 10 },
+};
+
+const tanker: Meaning = {
+  up: "원유·석유제품 해상 물동량 증가 또는 운항 거리 증가(제재·우회) → 유조선사 유리, 정유사 원가 부담",
+  down: "물동량 감소 또는 선박 공급 증가 → 유조선사 이익 둔화",
+  threshold: { pct: 15 },
+};
+
 const MEANINGS: Record<string, Meaning> = {
+  "SHIP:BDI": dryBulk,
+  "SHIP:BCI": dryBulk,
+  "SHIP:SCFI": container,
+  "SHIP:CCFI": container,
+  "SHIP:BDTI": tanker,
+  "SHIP:BCTI": tanker,
   "YF:^TNX": {
     up: "할인율 상승 → 성장주·장기채에 부담, 대출·주택 위축. 경기 호조나 물가 우려가 원인",
     down: "할인율 하락 → 성장주·채권에 우호적. 경기 둔화 우려로 내리는 경우도 있어 원인 확인 필요",

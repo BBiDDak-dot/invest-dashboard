@@ -119,6 +119,13 @@ const MACRO_ORDER = [
   "YF:RB=F",
   "YF:HO=F",
   "FRED:DJFUELUSGULF",
+  // 해운 운임: 벌크 | 컨테이너, 원유선 | 제품선 순서로 나란히
+  "SHIP:BDI",
+  "SHIP:BCI",
+  "SHIP:SCFI",
+  "SHIP:CCFI",
+  "SHIP:BDTI",
+  "SHIP:BCTI",
   "CNN:FEAR_GREED",
   "FG:NASDAQ",
   "FG:KOSPI",
@@ -157,12 +164,14 @@ const OIL_SERIES = ["YF:CL=F", "YF:BZ=F", "YF:RB=F", "YF:HO=F", "FRED:DJFUELUSGU
 export const isOil = (id: string) => OIL_SERIES.includes(id);
 // 유가 선물 곡선(콘탱고·백워데이션). 에너지 탭에서 따로 보여줌
 export const isCurve = (id: string) => id.startsWith("CURVE:");
+// 해운 운임 지수(BDI·SCFI 등). 에너지 탭에서 따로 보여줌
+export const isShip = (id: string) => id.startsWith("SHIP:");
 // 나머지는 매크로 경제 지표
 // AI 사이클 지표(OpenRouter 토큰·빅테크 CAPEX·TSMC 월매출). AI 탭에서 따로 보여줌
 export const isAi = (id: string) => id.startsWith("AI:");
 // 품목별 수출(관세청). 수출 데이터 탭에서 따로 보여줌
 export const isExport = (id: string) => id.startsWith("EXP:");
-export const isEconomic = (id: string) => !isAi(id) && !isExport(id) && !isSentiment(id) && !isMdd(id) && !isValuation(id) && !isOil(id) && !isCurve(id);
+export const isEconomic = (id: string) => !isAi(id) && !isExport(id) && !isSentiment(id) && !isMdd(id) && !isValuation(id) && !isOil(id) && !isCurve(id) && !isShip(id);
 export const isFearGreed = (id: string) => /^(CNN|FG):/.test(id);
 
 export async function getMacro(days = 365 * 3): Promise<MacroRow[]> {
