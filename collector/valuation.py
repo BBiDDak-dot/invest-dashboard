@@ -3,7 +3,7 @@
 - KOSPI·KOSDAQ: 공개된 지수 값이 없어(FnGuide는 Actions에서 막힘) 종목 컨센서스를 모아 직접 계산함.
   시총 상위 KOSPI 200·KOSDAQ 150 종목(보통주)의 와이즈리포트 연간 EPS·BPS 추정치로 종목별 12M Fwd EPS·BPS를 구하고
   (올해 추정치와 내년 추정치를 남은 기간 비율로 섞음), 지수 PER = 시총 합 / 예상 순이익 합, PBR = 시총 합 / 예상 자본 합.
-  컨센서스가 없는 종목은 빠짐. 그때그때의 컨센서스 이력은 무료 출처가 없어 오늘부터 쌓임.
+  컨센서스가 없는 종목은 빠짐. 과거 값은 와이즈리포트 '컨센서스 추이'(지난 1년 월말)로 한 번 채움, 그 이전은 출처 없음.
 - S&P 500: FactSet Earnings Insight 주간 보고서(PDF)의 forward 12-month P/E. 지난 3년 보고서로 이력도 채움.
 - NASDAQ 100: WSJ P/E & Yields 표의 Estimate(Birinyi Associates, 12개월 선행, 금요일마다 갱신). 이력 없음.
 - 미국 지수 12M Fwd PBR은 무료 출처가 없어 안 넣음.
@@ -18,6 +18,7 @@ Trailing(직전 실적 기준) PER·PBR:
 
 import datetime as dt
 import io
+import json
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -139,6 +140,73 @@ def _has(series_id: str) -> bool:
     return len(db.select("macro_observations", f"select=date&series_id=eq.{sid}&limit=30")) >= 30
 
 
+def _oldest(series_id: str) -> str | None:
+    if not db.URL:
+        return None
+    sid = requests.utils.quote(series_id, safe="")
+    got = db.select("macro_observations", f"select=date&series_id=eq.{sid}&order=date.asc&limit=1")
+    return got[0]["date"] if got else None
+
+
+def _consensus_hist(code: str, yymm: str, acc: str, today: dt.date) -> dict[str, float]:
+    """와이즈리포트 '컨센서스 추이'(cF5002): 결산 yymm 추정치의 지난 1년 월말 평균 {날짜: 값}. acc 312000=EPS, 314000=BPS."""
+    r = requests.get(
+        "https://navercomp.wisereport.co.kr/v2/company/ajax/cF5002.aspx",
+        params={"cmp_cd": code, "dt": today.strftime("%Y%m%d"), "yymm": yymm, "frq": "Y", "acc_cd": acc, "fingubun": "MAIN", "chartType": "svg"},
+        headers={**UA, "Referer": f"https://navercomp.wisereport.co.kr/v2/company/c1050001.aspx?cmp_cd={code}"},
+        timeout=20,
+    )
+    try:
+        c = json.loads(json.loads(r.text)["chart1"])
+    except (ValueError, KeyError, TypeError):
+        return {}
+    return {d.replace("/", "-"): float(v) for d, v in zip(c.get("categories") or [], c.get("avg") or []) if v is not None}
+
+
+def _daily_close(code: str, days: int) -> dict[str, float]:
+    r = requests.get("https://fchart.stock.naver.com/sise.nhn", params={"symbol": code, "timeframe": "day", "count": days, "requestType": 0}, headers=UA, timeout=20)
+    return {f"{d[:4]}-{d[4:6]}-{d[6:]}": float(close) for d, *_, close, _vol in (x.split("|") for x in re.findall(r'data="([^"]+)"', r.text))}
+
+
+def backfill_fwd(market: str, got: list, today: dt.date, d: str) -> tuple[dict[str, float], dict[str, float]]:
+    """지난 1년 월말 12M Fwd PER·PBR을 그때의 컨센서스(와이즈리포트 컨센서스 추이)로 다시 계산.
+    주식 수는 지금 시총/주가로 근사(Trailing 백필과 같은 방식). 컨센서스 이력이 1년치만 공개돼 그 이전은 못 채움."""
+
+    def hist(item):
+        s, a, price, mcap, _w = item
+        # 지난 1년 동안 FY1·FY2가 될 수 있는 결산 3개 (예: 2025·2026·2027년 12월)
+        ends = [e for e in sorted(a) if e >= (today - dt.timedelta(days=370)).isoformat()][:3]
+        try:
+            eps = {e: _consensus_hist(s["itemCode"], e[:4] + e[5:7], "312000", today) for e in ends}
+            bps = {e: _consensus_hist(s["itemCode"], e[:4] + e[5:7], "314000", today) for e in ends}
+            closes = _daily_close(s["itemCode"], 300)
+        except requests.RequestException:
+            return None
+        return mcap / price, eps, bps, closes
+
+    with ThreadPoolExecutor(6) as ex:
+        hs = [h for h in ex.map(hist, got) if h]
+    months = sorted({m for _sh, eps, _b, _c in hs for e in eps.values() for m in e if m < d})
+    per, pbr = {}, {}
+    for m in months:
+        day = dt.date.fromisoformat(m)
+        total = cap = earn = book = 0.0
+        for shares, eps, bps, closes in hs:
+            p = next((closes[k] for k in sorted(closes, reverse=True) if k <= m), None)
+            if not p:
+                continue
+            total += shares * p
+            annual = {e: {"eps": eps[e].get(m), "bps": bps.get(e, {}).get(m), "est": True} for e in eps}
+            fe, fb = fwd_12m(annual, "eps", day), fwd_12m(annual, "bps", day)
+            if fe is None or fb is None:
+                continue
+            cap, earn, book = cap + shares * p, earn + shares * fe, book + shares * fb
+        if total and cap >= total / 3 and earn > 0 and book > 0:
+            per[m], pbr[m] = round(cap / earn, 2), round(cap / book, 2)
+    print(f"[밸류에이션] {market} Fwd 과거 {len(per)}개월 채움 (종목 {len(hs)}개) {dict(sorted(per.items())[:2])}")
+    return per, pbr
+
+
 def collect_kr() -> None:
     today = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=9)).date()
     for market, n in KR_UNIVERSE.items():
@@ -172,8 +240,14 @@ def collect_kr() -> None:
         print(f"[밸류에이션] {market} Fwd: 시총 비중 {cap / total * 100:.0f}%, PER {cap / max(earn, 1):.2f} PBR {cap / max(book, 1):.2f}")
         if cap < total / 3 or earn <= 0 or book <= 0:
             raise RuntimeError(f"{market} 컨센서스 종목이 너무 적음")
-        _save(f"VAL:{market}_FPER", f"{market} 12M Fwd PER", "KR", {d: round(cap / earn, 2)})
-        _save(f"VAL:{market}_FPBR", f"{market} 12M Fwd PBR", "KR", {d: round(cap / book, 2)})
+        fper, fpbr = {d: round(cap / earn, 2)}, {d: round(cap / book, 2)}
+        # 이력이 반년이 안 되면 지난 1년 월말 값을 컨센서스 추이로 채움 (한 번만)
+        oldest = _oldest(f"VAL:{market}_FPER")
+        if not oldest or oldest > (today - dt.timedelta(days=180)).isoformat():
+            hp, hb = backfill_fwd(market, got, today, d)
+            fper, fpbr = {**hp, **fper}, {**hb, **fpbr}
+        _save(f"VAL:{market}_FPER", f"{market} 12M Fwd PER", "KR", fper)
+        _save(f"VAL:{market}_FPBR", f"{market} 12M Fwd PBR", "KR", fpbr)
 
         # Trailing: 직전 확정 실적. 주식 수 = 지금 시총 / 지금 주가 (과거 날짜도 같은 주식 수로 근사)
         def agg(day: dt.date, price_of) -> tuple[float, float, float, float] | None:
