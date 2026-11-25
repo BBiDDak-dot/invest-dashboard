@@ -1,6 +1,5 @@
 import "server-only";
 import { select, selectAll } from "./db";
-import { daysAgo } from "./queries";
 
 export type BpsRow = { fy_end: string; bps: number; estimate: boolean; source: string | null; updated_at: string };
 
@@ -14,10 +13,11 @@ export type PbrBand = {
   stats: { min: number; max: number; avg: number } | null;
   bps: BpsRow[];
   flatTail: boolean; // 마지막 추정치보다 먼 미래가 필요해 마지막 값을 그대로 쓴 구간이 있음
+  years: number; // 밴드가 그려진 기간(년)
 };
 
 const DAY = 86400_000;
-const YEARS = 5;
+const START = "2014-01-01"; // 수집기가 2015년 결산부터 BPS를 채움(12M Fwd라 1년 앞부터 그림)
 
 // 날짜 t의 12M Fwd BPS = (t + 12개월) 시점의 BPS를 결산일 BPS 사이에서 선형 보간.
 // 12월 결산이면 FY1·FY2를 남은 개월 수로 가중한 값과 같음.
@@ -34,7 +34,7 @@ export function fwdBpsAt(t: number, pts: { d: number; v: number }[], horizonDays
   return last.d >= t || horizonDays === 0 ? { v: last.v, flat: horizonDays > 0 } : null;
 }
 
-// 밴드 배수 5개: 5년 최저~최고 PBR을 고르게 나눈 값(단위에 맞춰 반올림)
+// 밴드 배수 5개: 전체 기간 최저~최고 PBR을 고르게 나눈 값(단위에 맞춰 반올림)
 export function bandMultiples(min: number, max: number): number[] {
   const unit = max < 1 ? 0.05 : max < 5 ? 0.1 : 0.5;
   const lo = Math.floor(min / unit) * unit;
@@ -47,9 +47,11 @@ export async function getPbrBand(ticker: string, liveClose?: number): Promise<Pb
   const t = encodeURIComponent(ticker);
   const bps = await select<BpsRow>("bps_annual", `select=fy_end,bps,estimate,source,updated_at&ticker=eq.${t}&order=fy_end`).catch(() => null);
   if (!bps || bps.length === 0) return null;
+  // 가장 오래된 BPS 결산 1년 전부터(12M Fwd 계산 가능한 시점)
+  const first = new Date(Date.parse(bps[0].fy_end) - 366 * DAY).toISOString().slice(0, 10);
   const prices = await selectAll<{ date: string; close: number }>(
     "prices",
-    `select=date,close&ticker=eq.${t}&date=gte.${daysAgo(365 * YEARS)}&order=date`,
+    `select=date,close&ticker=eq.${t}&date=gte.${first > START ? first : START}&order=date`,
   );
   // 주간(그 주 마지막 거래일)으로 줄여 그림을 가볍게
   const weekly: { date: string; close: number }[] = [];
@@ -67,11 +69,17 @@ export async function getPbrBand(ticker: string, liveClose?: number): Promise<Pb
   // 컨센서스(오늘 이후 결산 추정치)가 없으면 12M Fwd 대신 실적 BPS 기준 밴드
   const mode = bps.some((b) => b.estimate && b.fy_end >= today) ? "fwd" : "trailing";
   let flatTail = false;
-  const fwd = weekly.map((p) => {
+  let fwd = weekly.map((p) => {
     const r = fwdBpsAt(Date.parse(p.date), pts, mode === "fwd" ? 365 : 0);
     if (r?.flat) flatTail = true;
     return r ? Math.round(r.v) : null;
   });
+  // BPS가 없는 앞쪽 구간은 잘라냄
+  const head = fwd.findIndex((v) => v != null);
+  if (head > 0) {
+    weekly.splice(0, head);
+    fwd = fwd.slice(head);
+  }
   const pbrs = weekly.map((p, i) => (fwd[i] ? Number(p.close) / fwd[i]! : null)).filter((v): v is number => v != null);
   const lastI = weekly.length - 1;
   const cur = lastI >= 0 && fwd[lastI] ? { date: weekly[lastI].date, close: Number(weekly[lastI].close), bps: fwd[lastI]!, pbr: Number(weekly[lastI].close) / fwd[lastI]! } : null;
@@ -87,5 +95,6 @@ export async function getPbrBand(ticker: string, liveClose?: number): Promise<Pb
     stats,
     bps,
     flatTail,
+    years: weekly.length ? Math.max(1, Math.round((Date.parse(weekly.at(-1)!.date) - Date.parse(weekly[0].date)) / (365.25 * DAY))) : 0,
   };
 }
