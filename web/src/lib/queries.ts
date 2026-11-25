@@ -158,11 +158,13 @@ export const isOil = (id: string) => OIL_SERIES.includes(id);
 // 유가 선물 곡선(콘탱고·백워데이션). 에너지 탭에서 따로 보여줌
 export const isCurve = (id: string) => id.startsWith("CURVE:");
 // 나머지는 매크로 경제 지표
-export const isEconomic = (id: string) => !isSentiment(id) && !isMdd(id) && !isValuation(id) && !isOil(id) && !isCurve(id);
+// AI 사이클 지표(OpenRouter 토큰·빅테크 CAPEX·TSMC 월매출). AI 탭에서 따로 보여줌
+export const isAi = (id: string) => id.startsWith("AI:");
+export const isEconomic = (id: string) => !isAi(id) && !isSentiment(id) && !isMdd(id) && !isValuation(id) && !isOil(id) && !isCurve(id);
 export const isFearGreed = (id: string) => /^(CNN|FG):/.test(id);
 
 export async function getMacro(days = 365 * 3): Promise<MacroRow[]> {
-  const series = await select<MacroSeries>("macro_series", "select=*");
+  const series = await select<MacroSeries>("macro_series", "select=*&series_id=not.like.AI:*");
   const rank = (id: string) => (MACRO_ORDER.indexOf(id) + 1 || 99);
   series.sort((a, b) => rank(a.series_id) - rank(b.series_id));
   return Promise.all(
@@ -177,6 +179,20 @@ export async function getMacro(days = 365 * 3): Promise<MacroRow[]> {
 }
 
 // 4대 지수 MDD는 장기(20년)로 봄. 3년 이전은 주별 값만 저장돼 있음
+// AI 지표는 시작 시점이 제각각(OpenRouter 2025~, CAPEX 2020~)이라 전체 이력을 받음
+export async function getAi(): Promise<MacroRow[]> {
+  const series = await select<MacroSeries>("macro_series", "select=*&series_id=like.AI:*");
+  return Promise.all(
+    series.map(async (s) => ({
+      ...s,
+      history: await selectAll<MacroObservation>(
+        "macro_observations",
+        `select=series_id,date,value&series_id=eq.${encodeURIComponent(s.series_id)}&order=date`,
+      ),
+    })),
+  );
+}
+
 export async function getMdd(years = 20): Promise<MacroRow[]> {
   const series = (await select<MacroSeries>("macro_series", "select=*&series_id=like.MDD:*")).sort(
     (a, b) => (MACRO_ORDER.indexOf(a.series_id) + 1 || 99) - (MACRO_ORDER.indexOf(b.series_id) + 1 || 99),
