@@ -50,8 +50,8 @@ COMBOS = [("DRAM_ALL", "반도체", "DRAM (모듈 포함)", ["DRAM", "DRAM_MODUL
 CHECK_PREFIXES = ["854232", "847330", "852351", "330499", "190230", "8504"]
 
 
-def _call(hs: str, y0: str, y1: str) -> list[dict]:
-    params = {"serviceKey": KEY, "strtYymm": y0, "endYymm": y1, "hsSgn": hs, "numOfRows": 10000, "pageNo": 1}
+def _page(hs: str, y0: str, y1: str, page: int) -> ET.Element:
+    params = {"serviceKey": KEY, "strtYymm": y0, "endYymm": y1, "hsSgn": hs, "numOfRows": 10000, "pageNo": page}
     for attempt in range(3):
         try:
             r = requests.get(URL, params=params, timeout=60)
@@ -67,7 +67,20 @@ def _call(hs: str, y0: str, y1: str) -> list[dict]:
     if code not in (None, "00", "0", "000"):
         msg = root.findtext(".//resultMsg") or root.findtext(".//returnAuthMsg") or ""
         raise RuntimeError(f"관세청 API 오류 {code}: {msg}")
-    return [{c.tag: (c.text or "").strip() for c in item} for item in root.iter("item")]
+    return root
+
+
+def _call(hs: str, y0: str, y1: str) -> list[dict]:
+    """응답 행 전부(국가×10단위 품목×월 + 기간 '총계' 행 1개). 행이 많으면 쪽을 넘김."""
+    rows: list[dict] = []
+    for page in range(1, 20):
+        root = _page(hs, y0, y1, page)
+        got = [{c.tag: (c.text or "").strip() for c in item} for item in root.iter("item")]
+        rows += got
+        total = int(root.findtext(".//totalCount") or 0)
+        if not got or not total or len(rows) >= total:
+            break
+    return rows
 
 
 def _ym(row: dict) -> str | None:
@@ -88,7 +101,7 @@ def _num(v: str) -> float:
 def _is_total_country(row: dict) -> bool:
     c = (row.get("statCd") or "").strip()
     n = (row.get("statCdCntnKor1") or "").strip()
-    return c in ("", "-", "00", "ZZ") or n in ("-", "총계", "전체", "합계")
+    return c in ("", "-") or n in ("-", "총계", "전체", "합계")
 
 
 def _monthly(hs: str, months: list[tuple[str, str]]) -> dict[str, tuple[float, float]]:
@@ -96,10 +109,16 @@ def _monthly(hs: str, months: list[tuple[str, str]]) -> dict[str, tuple[float, f
     out: dict[str, tuple[float, float]] = {}
     for y0, y1 in months:
         by_month: dict[str, list[dict]] = defaultdict(list)
-        for row in _call(hs, y0, y1):
+        rows_all = _call(hs, y0, y1)
+        for row in rows_all:
             d = _ym(row)
             if d:
                 by_month[d].append(row)
+        # 기간 '총계' 행과 월별 행 합이 다르면 행이 덜 온 것
+        grand = sum(_num(r.get("expDlr", "0")) for r in rows_all if not _ym(r))
+        part = sum(_num(r.get("expDlr", "0")) for rs in by_month.values() for r in rs)
+        if grand and abs(part - grand) > grand * 0.001:
+            print(f"[수출] 경고 {hs} {y0}~{y1}: 월별 합 {part / 1e6:,.0f} ≠ 총계 {grand / 1e6:,.0f}백만$")
         for d, rows in by_month.items():
             totals = [r for r in rows if _is_total_country(r)]
             rows = totals or rows
