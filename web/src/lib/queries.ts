@@ -160,11 +160,13 @@ export const isCurve = (id: string) => id.startsWith("CURVE:");
 // 나머지는 매크로 경제 지표
 // AI 사이클 지표(OpenRouter 토큰·빅테크 CAPEX·TSMC 월매출). AI 탭에서 따로 보여줌
 export const isAi = (id: string) => id.startsWith("AI:");
-export const isEconomic = (id: string) => !isAi(id) && !isSentiment(id) && !isMdd(id) && !isValuation(id) && !isOil(id) && !isCurve(id);
+// 품목별 수출(관세청). 수출 데이터 탭에서 따로 보여줌
+export const isExport = (id: string) => id.startsWith("EXP:");
+export const isEconomic = (id: string) => !isAi(id) && !isExport(id) && !isSentiment(id) && !isMdd(id) && !isValuation(id) && !isOil(id) && !isCurve(id);
 export const isFearGreed = (id: string) => /^(CNN|FG):/.test(id);
 
 export async function getMacro(days = 365 * 3): Promise<MacroRow[]> {
-  const series = await select<MacroSeries>("macro_series", "select=*&series_id=not.like.AI:*");
+  const series = await select<MacroSeries>("macro_series", "select=*&series_id=not.like.AI:*&series_id=not.like.EXP:*");
   const rank = (id: string) => (MACRO_ORDER.indexOf(id) + 1 || 99);
   series.sort((a, b) => rank(a.series_id) - rank(b.series_id));
   return Promise.all(
@@ -191,6 +193,17 @@ export async function getAi(): Promise<MacroRow[]> {
       ),
     })),
   );
+}
+
+// 품목별 월간 수출: 전체 이력(2019~)을 한 번에 받음
+export async function getExports(): Promise<MacroRow[]> {
+  const [series, obs] = await Promise.all([
+    select<MacroSeries>("macro_series", "select=*&series_id=like.EXP:*"),
+    selectAll<MacroObservation>("macro_observations", "select=series_id,date,value&series_id=like.EXP:*&order=date"),
+  ]);
+  const by = new Map<string, MacroObservation[]>();
+  for (const o of obs) by.set(o.series_id, [...(by.get(o.series_id) ?? []), o]);
+  return series.map((s) => ({ ...s, history: by.get(s.series_id) ?? [] }));
 }
 
 export async function getMdd(years = 20): Promise<MacroRow[]> {
