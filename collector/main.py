@@ -5,6 +5,7 @@ import datetime as dt
 import os
 import sys
 
+import ai_cycle
 import calendar_events
 import cleanup
 import db
@@ -59,6 +60,7 @@ def main() -> None:
         ("수급", lambda: flows.collect(start)),
         ("종목 수급", stock_flows.collect),
         ("지수 밸류에이션", valuation.collect),
+        ("AI 지표", ai_cycle.collect),
         ("PBR 밴드", pbr_band.collect),  # 시세 다음에(주가 보충)
         ("산업 클리핑", news_clips.collect),
         ("일정", calendar_events.collect),
