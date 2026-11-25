@@ -34,7 +34,7 @@ SAMPLE_WATCHLIST = [
 ]
 
 
-ON_DEMAND = {"지표 점검", "공포탐욕 비교", "수출 품목 점검", "운임 점검"}  # 정기 수집에선 빼고 only로 부를 때만 실행
+ON_DEMAND = {"지표 점검", "공포탐욕 비교", "수출 품목 점검"}  # 정기 수집에선 빼고 only로 부를 때만 실행
 
 
 def main() -> None:
@@ -58,6 +58,7 @@ def main() -> None:
         ("미국 실적", us_earnings.collect),
         ("투자지표", lambda: macro.collect(start)),
         ("유가 곡선", lambda: oil_curve.collect(start)),
+        ("해운 운임", freight.collect),
         ("순자산 기록", snapshot.collect),  # 시세·환율 다음에
         ("재무", lambda: financials.collect(watchlist)),
         ("수급", lambda: flows.collect(start)),
@@ -71,7 +72,6 @@ def main() -> None:
         ("PDF 정리", cleanup.collect),
         ("지표 점검", macro_check.collect),  # 시험용: only="지표 점검"으로 실행
         ("공포탐욕 비교", sentiment.compare),
-        ("운임 점검", freight.check),  # 시험용: 운임 출처 접속 확인
         ("수출 품목 점검", exports.check),  # 시험용: HS코드 아래 품목명 출력  # 시험용: 예전·새 공포탐욕 계산을 출력만 함
     ]:
         if (only and name not in only) or (not only and name in ON_DEMAND):
