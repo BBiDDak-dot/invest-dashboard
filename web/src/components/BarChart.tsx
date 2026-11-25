@@ -10,6 +10,7 @@ type Props = {
   decimals?: number;
   posColor?: string;
   negColor?: string;
+  lastColor?: string; // 가장 최근 막대만 다른 색(예: 최근 달 강조)
 };
 
 // LineChart와 같은 여백이라 위아래로 놓으면 x축이 맞음
@@ -26,7 +27,7 @@ function ticks(min: number, max: number, count = 4) {
 }
 
 // 0 기준 막대 그래프. 0 아래(음수) 막대는 다른 색 + 배경 음영으로 구분
-export function BarChart({ labels, values, name, height = 160, decimals = 2, posColor = "var(--series-1)", negColor = "var(--series-2)" }: Props) {
+export function BarChart({ labels, values, name, height = 160, decimals = 2, posColor = "var(--series-1)", negColor = "var(--series-2)", lastColor }: Props) {
   const format = (v: number) => v.toLocaleString("ko-KR", { maximumFractionDigits: decimals });
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -105,7 +106,7 @@ export function BarChart({ labels, values, name, height = 160, decimals = 2, pos
                 y={Math.min(y(v), y(0))}
                 width={bw}
                 height={Math.max(0.5, Math.abs(y(v) - y(0)))}
-                fill={v < 0 ? negColor : posColor}
+                fill={lastColor && i === values.length - 1 ? lastColor : v < 0 ? negColor : posColor}
                 opacity={hover == null || hover === i ? 0.85 : 0.6}
               />
             ),

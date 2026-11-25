@@ -76,7 +76,7 @@ def collect(start: dt.date) -> None:
     start = min(start, dt.date.today() - dt.timedelta(days=HISTORY_DAYS))
     # config에서 뺀 지표는 DB에서도 지움 (관측치는 cascade로 함께 삭제)
     keep = [f"FRED:{sid}" for sid, *_ in FRED_SERIES] + [f"YF:{s}" for s, *_ in YAHOO_SERIES] + [ism.SERIES_ID] + sentiment.SERIES_IDS + valuation.SERIES_IDS + oil_curve.SERIES_IDS
-    db.delete("macro_series", "series_id=not.in.(" + ",".join(f'"{k}"' for k in keep) + ")&series_id=not.like.AI:*")  # AI 지표는 ai_cycle이 관리
+    db.delete("macro_series", "series_id=not.in.(" + ",".join(f'"{k}"' for k in keep) + ")&series_id=not.like.AI:*&series_id=not.like.EXP:*")  # AI·수출 지표는 각 수집기가 관리
     # 한 출처가 실패해도 나머지(특히 심리 지표)는 저장되게 따로 실행
     failed = []
     for name, job in [("FRED", collect_fred), ("Yahoo", collect_yahoo), ("ISM", ism.collect), ("심리 지표", sentiment.collect)]:
